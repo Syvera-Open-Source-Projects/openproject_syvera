@@ -45,6 +45,10 @@ export interface InternalFilterValue {
   value:string[];
 }
 
+export function escapeFilterValue(value:string|undefined):string {
+  return value?.replace(/\\/g, '\\\\').replace(/"/g, '\\"') ?? '';
+}
+
 type FilterFunc<T> = (_value:T) => boolean;
 
 export default class FiltersFormController extends Controller {
@@ -505,7 +509,7 @@ export default class FiltersFormController extends Controller {
   }
 
   private buildFilterString(filter:InternalFilterValue) {
-    const valuesString = filter.value.length > 1 ? `[${filter.value.map((v) => `"${this.replaceDoubleQuotes(v)}"`).join(',')}]` : `"${this.replaceDoubleQuotes(filter.value[0])}"`;
+    const valuesString = filter.value.length > 1 ? `[${filter.value.map((v) => `"${escapeFilterValue(v)}"`).join(',')}]` : `"${escapeFilterValue(filter.value[0])}"`;
 
     return `${filter.name} ${filter.operator} ${valuesString}`;
   }
@@ -519,10 +523,6 @@ export default class FiltersFormController extends Controller {
       return JSON.stringify(filters.map((filter) => this.buildFilterJSON(filter)));
     }
     return filters.map((filter) => this.buildFilterString(filter)).join('&');
-  }
-
-  private replaceDoubleQuotes(value:string) {
-    return value && value.length > 0 ? value.replace(/"/g, '\\"') : '';
   }
 
   private readonly dateFilterTypes = ['datetime_past', 'date'];

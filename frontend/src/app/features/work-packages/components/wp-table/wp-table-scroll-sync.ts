@@ -103,7 +103,7 @@ export function createScrollSync(element:HTMLElement) {
         if (!syncedRight) {
           elTimeline.scrollTop = (ev.target as HTMLElement).scrollTop;
         }
-        if (syncedLeft && syncedRight) {
+        if (syncedRight) {
           syncedLeft = false;
           syncedRight = false;
         }
@@ -118,7 +118,7 @@ export function createScrollSync(element:HTMLElement) {
         if (!syncedLeft) {
           elTable.scrollTop = (ev.target as HTMLElement).scrollTop;
         }
-        if (syncedLeft && syncedRight) {
+        if (syncedLeft) {
           syncedLeft = false;
           syncedRight = false;
         }
