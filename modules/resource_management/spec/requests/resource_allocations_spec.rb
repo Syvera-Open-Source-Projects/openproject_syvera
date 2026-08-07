@@ -90,12 +90,12 @@ RSpec.describe "ResourceAllocations requests",
     end
 
     context "with allocation_kind=filter" do
-      it "renders the allocation step with a filter name and the filter form" do
+      it "renders the allocation step with a resource autocompleter" do
         get step_project_resource_allocations_path(project, allocation_kind: "filter"), as: :turbo_stream
 
         expect(response).to have_http_status(:ok)
-        expect(response.body).to include("resource_allocation[filter_name]")
-        expect(response.body).to include('name="filters"')
+        expect(response.body).to include("resource_allocation[user_resource_id]")
+        expect(response.body).to include(API::V3::Utilities::PathHelper::ApiV3Path.user_resources)
       end
     end
 
@@ -228,13 +228,14 @@ RSpec.describe "ResourceAllocations requests",
     end
 
     context "for a filter-criteria placeholder" do
+      let!(:existing) { create(:user_resource, name: "Senior Developer") }
+
       subject(:perform) do
         post project_resource_allocations_path(project),
              params: {
                allocation_kind: "filter",
-               filters: [{ login: { operator: "~", values: ["dev"] } }].to_json,
                resource_allocation: {
-                 filter_name: "Full stack Developer (DE-EN)",
+                 user_resource_id: existing.id,
                  entity_type: "WorkPackage",
                  entity_id: work_package.id,
                  date_range: "2026-03-02 - 2026-03-03",
@@ -244,19 +245,20 @@ RSpec.describe "ResourceAllocations requests",
              as: :turbo_stream
       end
 
-      it "creates the requested user resource alongside the allocation" do
+      it "links the picked resource without creating another one" do
         expect { perform }.to change(ResourceAllocation, :count).by(1)
-          .and change(UserResource, :count).by(1)
+          .and not_change(UserResource, :count)
 
         allocation = ResourceAllocation.last
         expect(allocation.principal).to be_nil
+        expect(allocation.user_resource).to eq(existing)
         expect(allocation).to be_filter_based
         expect(allocation).to be_needs_principal_assignment
+      end
 
-        resource = allocation.user_resource
-        expect(resource.name).to eq("Full stack Developer (DE-EN)")
-        expect(resource.user_filter.map(&:name)).to contain_exactly(:login)
-        expect(resource.user_filter.first.values).to eq(["dev"])
+      # Criteria belong to the catalogue entry; the allocation form only links.
+      it "leaves the resource's own filter untouched" do
+        expect { perform }.not_to change { existing.reload.user_filter.map(&:name) }
       end
     end
 

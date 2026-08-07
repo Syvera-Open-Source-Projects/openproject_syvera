@@ -70,6 +70,9 @@ module ::ResourceManagement
       replace_via_turbo_stream(
         component: ResourceAllocations::AllocationStep::ScheduleViolationBannerComponent.new(allocation:)
       )
+      replace_via_turbo_stream(
+        component: ResourceAllocations::AllocationStep::ResourceFilterComponent.new(allocation:)
+      )
       respond_with_turbo_streams
     end
 
@@ -390,7 +393,7 @@ module ::ResourceManagement
     def submitted_allocation_params
       params
         .fetch(:resource_allocation, {})
-        .permit(:principal_id, :filter_name, :date_range, :allocated_hours, :entity_type, :entity_id)
+        .permit(:principal_id, :user_resource_id, :date_range, :allocated_hours, :entity_type, :entity_id)
         .to_h
     end
 
@@ -409,22 +412,22 @@ module ::ResourceManagement
     # saving a new record saves the children loaded into its `has_many`.
     def allocation_params
       permitted = params
-                    .expect(resource_allocation: %i[principal_id filter_name date_range allocated_hours
+                    .expect(resource_allocation: %i[principal_id user_resource_id date_range allocated_hours
                                                     entity_type entity_id])
                     .to_h
                     .symbolize_keys
 
       principal_id = permitted.delete(:principal_id)
-      filter_name = permitted.delete(:filter_name)
+      user_resource_id = permitted.delete(:user_resource_id)
       entity = resolve_visible_entity(permitted.delete(:entity_type), permitted.delete(:entity_id))
-      permitted.merge(entity:, **resource_params(principal_id, filter_name))
+      permitted.merge(entity:, **resource_params(principal_id, user_resource_id))
     end
 
-    def resource_params(principal_id, filter_name)
+    def resource_params(principal_id, user_resource_id)
       if filter_based_kind?
         {
           principal: nil,
-          user_resource: user_resource_for(filter_name)
+          user_resource: selected_user_resource(user_resource_id)
         }
       else
         {
@@ -434,27 +437,14 @@ module ::ResourceManagement
       end
     end
 
-    # First iteration: every filter-based allocation owns its resource, so a new
-    # one is built here rather than picked from a catalogue. Editing an
-    # allocation updates the resource it already has instead of orphaning it.
-    def user_resource_for(name)
-      resource = @resource_allocation&.user_resource || UserResource.new
-      resource.name = name
-      resource.user_filter = parsed_user_filter
-      resource
+    # Resources are picked from the catalogue, never described inline, so this
+    # only ever links an existing one — its criteria are left untouched.
+    def selected_user_resource(user_resource_id)
+      return if user_resource_id.blank?
+
+      UserResource.visible(current_user).find_by(id: user_resource_id)
     end
 
-    # The resource's `user_filter` serializes UserQuery filter objects, so
-    # convert the FilterForm's JSON payload into them.
-    def parsed_user_filter
-      return [] if params[:filters].blank?
-
-      query = UserQuery.new
-      ::Queries::ParamsParser.parse(filters: params[:filters])
-                             .fetch(:filters, [])
-                             .each { |f| query.where(f[:attribute], f[:operator], f[:values]) }
-      query.filters
-    end
 
     def preselected_work_package
       return @preselected_work_package if defined?(@preselected_work_package)

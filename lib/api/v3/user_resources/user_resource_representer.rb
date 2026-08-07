@@ -37,12 +37,6 @@ module API
         property :id, render_nil: true
         property :name
 
-        # The filter rendered as human-readable phrases, so a picker can show
-        # what a resource stands for without resolving custom field ids itself.
-        property :criteria,
-                 getter: ->(*) { ::Queries::FilterSummary.new(user_filter).phrases },
-                 render_nil: true
-
         def _type
           "UserResource"
         end

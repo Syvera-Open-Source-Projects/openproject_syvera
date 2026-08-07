@@ -53,11 +53,10 @@ RSpec.describe API::V3::UserResources::UserResourcesAPI,
 
     it_behaves_like "API V3 collection response", 2, 2, "UserResource"
 
-    it "renders the name and the filter as readable criteria" do
+    it "renders the name" do
       element = parsed_response["_embedded"]["elements"].find { |e| e["id"] == developer.id }
 
       expect(element["name"]).to eq("Senior Developer")
-      expect(element["criteria"]).to eq(Queries::FilterSummary.new(developer.user_filter).phrases)
     end
   end
 
