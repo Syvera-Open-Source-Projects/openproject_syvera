@@ -403,6 +403,10 @@ module ::ResourceManagement
                                .find(params.expect(:id))
     end
 
+    # Deliberately not memoized: create and update read this twice, once to
+    # validate a throwaway allocation and once to persist the real one. Sharing
+    # one UserResource between them would make the resource save both, since
+    # saving a new record saves the children loaded into its `has_many`.
     def allocation_params
       permitted = params
                     .expect(resource_allocation: %i[principal_id filter_name date_range allocated_hours
@@ -411,29 +415,37 @@ module ::ResourceManagement
                     .symbolize_keys
 
       principal_id = permitted.delete(:principal_id)
+      filter_name = permitted.delete(:filter_name)
       entity = resolve_visible_entity(permitted.delete(:entity_type), permitted.delete(:entity_id))
-      permitted.merge(entity:, **resource_params(principal_id))
+      permitted.merge(entity:, **resource_params(principal_id, filter_name))
     end
 
-    def resource_params(principal_id)
+    def resource_params(principal_id, filter_name)
       if filter_based_kind?
         {
-          principal_explicit: false,
           principal: nil,
-          user_filter: parsed_user_filter
+          user_resource: user_resource_for(filter_name)
         }
       else
         {
-          principal_explicit: true,
           principal: User.visible.in_project(@project).find_by(id: principal_id),
-          filter_name: nil,
-          user_filter: []
+          user_resource: nil
         }
       end
     end
 
-    # `user_filter` serializes UserQuery filter objects, so convert the
-    # FilterForm's JSON payload into them.
+    # First iteration: every filter-based allocation owns its resource, so a new
+    # one is built here rather than picked from a catalogue. Editing an
+    # allocation updates the resource it already has instead of orphaning it.
+    def user_resource_for(name)
+      resource = @resource_allocation&.user_resource || UserResource.new
+      resource.name = name
+      resource.user_filter = parsed_user_filter
+      resource
+    end
+
+    # The resource's `user_filter` serializes UserQuery filter objects, so
+    # convert the FilterForm's JSON payload into them.
     def parsed_user_filter
       return [] if params[:filters].blank?
 
@@ -461,7 +473,6 @@ module ::ResourceManagement
     def prefilled_allocation
       ResourceAllocation.new(
         principal: preselected_user,
-        principal_explicit: preselected_user.present?,
         entity: preselected_work_package,
         start_date: params[:start_date],
         end_date: params[:end_date]

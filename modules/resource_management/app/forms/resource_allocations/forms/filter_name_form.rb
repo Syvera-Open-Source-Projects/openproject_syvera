@@ -35,6 +35,9 @@ module ResourceAllocations
         f.text_field(
           name: :filter_name,
           label: ResourceAllocation.human_attribute_name(:filter_name),
+          # The allocation itself no longer carries the name; it belongs to the
+          # resource being requested.
+          value: model.user_resource&.name,
           required: true
         )
       end

@@ -212,10 +212,9 @@ RSpec.describe "ResourceAllocations requests",
         allocation = ResourceAllocation.last
         expect(allocation.entity).to eq(work_package)
         expect(allocation.principal).to eq(assignee)
-        expect(allocation).to be_principal_explicit
+        expect(allocation).not_to be_filter_based
         expect(allocation.allocated_time).to eq(40 * 60)
-        expect(allocation.filter_name).to be_nil
-        expect(allocation.user_filter).to eq([])
+        expect(allocation.user_resource).to be_nil
         expect(allocation.requested_by).to eq(user)
       end
 
@@ -245,16 +244,19 @@ RSpec.describe "ResourceAllocations requests",
              as: :turbo_stream
       end
 
-      it "creates a placeholder allocation carrying the user filter" do
+      it "creates the requested user resource alongside the allocation" do
         expect { perform }.to change(ResourceAllocation, :count).by(1)
+          .and change(UserResource, :count).by(1)
 
         allocation = ResourceAllocation.last
         expect(allocation.principal).to be_nil
-        expect(allocation).not_to be_principal_explicit
+        expect(allocation).to be_filter_based
         expect(allocation).to be_needs_principal_assignment
-        expect(allocation.filter_name).to eq("Full stack Developer (DE-EN)")
-        expect(allocation.user_filter.map(&:name)).to contain_exactly(:login)
-        expect(allocation.user_filter.first.values).to eq(["dev"])
+
+        resource = allocation.user_resource
+        expect(resource.name).to eq("Full stack Developer (DE-EN)")
+        expect(resource.user_filter.map(&:name)).to contain_exactly(:login)
+        expect(resource.user_filter.first.values).to eq(["dev"])
       end
     end
 

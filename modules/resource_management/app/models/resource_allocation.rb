@@ -50,13 +50,13 @@ class ResourceAllocation < ApplicationRecord
   # `user_resource` is the profile that was requested, `principal` the human
   # that was staffed for it. Both are set once a generic allocation is staffed,
   # so the original request stays readable.
-  belongs_to :user_resource, optional: true, inverse_of: :resource_allocations
+  # Autosaved so that a resource built alongside the allocation is validated and
+  # persisted with it, and edits to an existing one are carried along.
+  belongs_to :user_resource, optional: true, inverse_of: :resource_allocations, autosave: true
   belongs_to :principal, class_name: "User", optional: true, inverse_of: :resource_allocations
   belongs_to :requested_by, class_name: "User", optional: true
   belongs_to :reviewed_by, class_name: "User", optional: true
   belongs_to :principal_assigned_by, class_name: "User", optional: true
-
-  serialize :user_filter, coder: Queries::Serialization::Filters.new(UserQuery)
 
   acts_as_journalized
 
@@ -69,7 +69,6 @@ class ResourceAllocation < ApplicationRecord
                                     "user_resource_id",
                                     formatter_key: :public_named_association
   register_journal_formatted_fields "entity_gid", formatter_key: :polymorphic_association
-  register_journal_formatted_fields "filter_name", formatter_key: :plaintext
 
   # State machine is ignored for the current implementation. All allocations go directly to the `allocated` state
   enum :state, {
@@ -173,13 +172,9 @@ class ResourceAllocation < ApplicationRecord
             inclusion: { in: ALLOWED_ENTITY_TYPES },
             allow_blank: true
 
-  with_options if: :principal_explicit? do
-    validates :principal, presence: true
-    validates :filter_name, absence: true
-    validates :user_filter, absence: true
-  end
-
-  validates :filter_name, presence: true, unless: :principal_explicit?
+  # An allocation either names a person outright or asks for a resource. Once a
+  # generic allocation is staffed it carries both.
+  validates :principal, presence: true, unless: :filter_based?
 
   validate :end_date_after_start_date
 
@@ -203,8 +198,12 @@ class ResourceAllocation < ApplicationRecord
 
   # An allocation asking for a resource rather than naming a person. Staffing
   # adds a principal but leaves the resource in place, so this stays true.
+  #
+  # The association is consulted as well as the key: a resource built alongside
+  # a new allocation has no id until both are saved. The key is checked first,
+  # so a persisted resource never costs a query here.
   def filter_based?
-    user_resource_id.present?
+    user_resource_id.present? || user_resource.present?
   end
 
   def user_assigned?
