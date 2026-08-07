@@ -61,21 +61,30 @@ FactoryBot.define do
                    multi_value: true,
                    possible_values: %w[German English French Spanish Italian Dutch Portuguese Polish])
         end
-      end
-      # Build real UserQuery filter objects (not hashes): the serialization
-      # coder dumps via `filter.field`, so it only accepts filter instances.
-      # The filter matches developers who speak German or English ("DE-EN"),
-      # leaving the other languages as non-matching values to test against.
-      user_filter do
-        job_title = job_title_custom_field
-        language = spoken_language_custom_field
-        developer_option = job_title.custom_options.find_by(value: "Developer")
-        language_options = language.custom_options.where(value: %w[German English])
+        # Build real UserQuery filter objects (not hashes): the serialization
+        # coder dumps via `filter.field`, so it only accepts filter instances.
+        # The filter matches developers who speak German or English ("DE-EN"),
+        # leaving the other languages as non-matching values to test against.
+        generic_filters do
+          job_title = job_title_custom_field
+          language = spoken_language_custom_field
+          developer_option = job_title.custom_options.find_by(value: "Developer")
+          language_options = language.custom_options.where(value: %w[German English])
 
-        query = UserQuery.new
-        query.where(job_title.column_name, "=", [developer_option.id.to_s])
-        query.where(language.column_name, "=", language_options.map { |option| option.id.to_s })
-        query.filters
+          query = UserQuery.new
+          query.where(job_title.column_name, "=", [developer_option.id.to_s])
+          query.where(language.column_name, "=", language_options.map { |option| option.id.to_s })
+          query.filters
+        end
+      end
+
+      user_filter { generic_filters }
+
+      # Allocations asking for the same thing share one resource, so that
+      # several generic allocations in a spec do not collide on the name.
+      user_resource do
+        UserResource.find_by(lastname: filter_name) ||
+          create(:user_resource, name: filter_name, user_filter: generic_filters)
       end
     end
   end

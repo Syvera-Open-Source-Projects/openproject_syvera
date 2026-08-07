@@ -113,9 +113,10 @@ RSpec.describe ResourceAllocation do
 
   describe "#user_assigned? / #filter_based? / #needs_principal_assignment?" do
     let(:assignee) { build_stubbed(:user) }
+    let(:user_resource) { build_stubbed(:user_resource) }
 
     context "with an explicit user allocation" do
-      subject(:allocation) { described_class.new(principal_explicit: true, principal: assignee) }
+      subject(:allocation) { described_class.new(principal: assignee) }
 
       it { is_expected.to be_user_assigned }
       it { is_expected.not_to be_filter_based }
@@ -123,7 +124,7 @@ RSpec.describe ResourceAllocation do
     end
 
     context "with an unassigned filter placeholder" do
-      subject(:allocation) { described_class.new(principal_explicit: false, principal: nil) }
+      subject(:allocation) { described_class.new(user_resource:, principal: nil) }
 
       it { is_expected.not_to be_user_assigned }
       it { is_expected.to be_filter_based }
@@ -131,7 +132,7 @@ RSpec.describe ResourceAllocation do
     end
 
     context "with a filter placeholder that has a principal assigned" do
-      subject(:allocation) { described_class.new(principal_explicit: false, principal: assignee) }
+      subject(:allocation) { described_class.new(user_resource:, principal: assignee) }
 
       it { is_expected.to be_user_assigned }
       it { is_expected.to be_filter_based }
@@ -240,14 +241,13 @@ RSpec.describe ResourceAllocation do
     shared_let(:work_package) { create(:work_package, project:) }
 
     let!(:unassigned_placeholder) do
-      create(:resource_allocation, entity: work_package, principal_explicit: false, principal: nil, filter_name: "Devs")
+      create(:resource_allocation, :with_user_filter, entity: work_package)
     end
 
     before do
       # An explicit allocation and an already-assigned placeholder must be excluded.
       create(:resource_allocation, entity: work_package)
-      create(:resource_allocation, entity: work_package,
-                                   principal_explicit: false, principal: create(:user), filter_name: "Devs")
+      create(:resource_allocation, :with_user_filter, entity: work_package, principal: create(:user))
     end
 
     it "returns only filter placeholders without a principal" do

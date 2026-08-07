@@ -79,7 +79,7 @@ class ResourceAllocation < ApplicationRecord
     canceled: "canceled"
   }
 
-  scope :needs_principal_assignment, -> { where(principal_explicit: false, principal_id: nil) }
+  scope :needs_principal_assignment, -> { where.not(user_resource_id: nil).where(principal_id: nil) }
   scope :for_principal, ->(principal) { where(principal:) }
   scope :for_project, ->(project_or_project_id) {
     project_id = project_or_project_id.is_a?(Project) ? project_or_project_id.id : project_or_project_id
@@ -94,7 +94,7 @@ class ResourceAllocation < ApplicationRecord
   def self.allocated_for_work_packages(work_packages)
     allocated
       .where(entity_type: "WorkPackage", entity_id: work_packages.map(&:id))
-      .includes(:principal)
+      .includes(:principal, user_resource: :user_resource_detail)
       .order(:id)
       .group_by(&:entity_id)
   end
@@ -104,7 +104,7 @@ class ResourceAllocation < ApplicationRecord
   def self.allocated_for_principals(principals)
     allocated
       .where(principal_id: principals.map(&:id))
-      .includes(:entity, :principal)
+      .includes(:entity, :principal, user_resource: :user_resource_detail)
       .order(:id)
       .group_by(&:principal_id)
   end
@@ -201,8 +201,10 @@ class ResourceAllocation < ApplicationRecord
     end
   end
 
+  # An allocation asking for a resource rather than naming a person. Staffing
+  # adds a principal but leaves the resource in place, so this stays true.
   def filter_based?
-    !principal_explicit?
+    user_resource_id.present?
   end
 
   def user_assigned?
@@ -210,7 +212,7 @@ class ResourceAllocation < ApplicationRecord
   end
 
   def needs_principal_assignment?
-    !principal_explicit? && principal_id.blank?
+    filter_based? && principal_id.blank?
   end
 
   # Only project members can be allocated, so the stored criteria are always
@@ -218,13 +220,8 @@ class ResourceAllocation < ApplicationRecord
   # it in to avoid loading the entity. Applying the membership filter last means a
   # `member` value smuggled into the stored filter is overwritten, not honoured.
   def candidate_query(project: self.project)
-    UserQuery.new.tap do |query|
-      user_filter.each do |filter|
-        query.where(filter.field, filter.operator, filter.values)
-      end
-
-      query.where(:member, "=", [project.id.to_s]) if project
-    end
+    query = user_resource&.candidate_query
+    query.where(:member, "=", [project.id.to_s]) if project
   end
 
   # Resolving the query can fail for an incompletely configured filter; a single

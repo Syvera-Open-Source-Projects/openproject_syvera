@@ -177,7 +177,7 @@ module ::ResourceManagement
     end
 
     def assignable_allocations
-      assignable_scope.includes(:entity).order(:start_date)
+      assignable_scope.includes(:entity, user_resource: :user_resource_detail).order(:start_date)
     end
 
     def visible_work_package_ids(allocations)

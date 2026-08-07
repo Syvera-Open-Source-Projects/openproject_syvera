@@ -81,8 +81,7 @@ module ResourceAllocations
                        ResourceAllocations::Forms::FilterNameForm.new(form),
                        ::Filters::FilterFormComponent.new(
                          builder: form,
-                         query: @allocation.candidate_query,
-                         # Membership in the allocation's project is implied, not a criterion to edit.
+                         query: @allocation.candidate_query || UserQuery.new,
                          excluded_filters: [:member],
                          wrap_with_controller: true,
                          hidden_input_name: "filters",
