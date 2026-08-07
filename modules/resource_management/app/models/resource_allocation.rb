@@ -47,6 +47,10 @@ class ResourceAllocation < ApplicationRecord
   MAX_ALLOCATED_TIME = (5000.hours / 1.minute).to_i
 
   belongs_to :entity, polymorphic: true, optional: false
+  # `user_resource` is the profile that was requested, `principal` the human
+  # that was staffed for it. Both are set once a generic allocation is staffed,
+  # so the original request stays readable.
+  belongs_to :user_resource, optional: true, inverse_of: :resource_allocations
   belongs_to :principal, class_name: "User", optional: true, inverse_of: :resource_allocations
   belongs_to :requested_by, class_name: "User", optional: true
   belongs_to :reviewed_by, class_name: "User", optional: true
@@ -62,6 +66,7 @@ class ResourceAllocation < ApplicationRecord
   # An allocation is about these people, so naming them does not depend on the
   # reader sharing a project with them.
   register_journal_formatted_fields "principal_id", "requested_by_id", "reviewed_by_id", "principal_assigned_by_id",
+                                    "user_resource_id",
                                     formatter_key: :public_named_association
   register_journal_formatted_fields "entity_gid", formatter_key: :polymorphic_association
   register_journal_formatted_fields "filter_name", formatter_key: :plaintext
