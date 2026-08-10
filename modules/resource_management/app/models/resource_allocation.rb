@@ -117,19 +117,17 @@ class ResourceAllocation < ApplicationRecord
 
   # Counts the candidates each filter-based allocation selects, keyed by
   # allocation id. Allocations commonly request the same user resource, so the
-  # candidate pool is resolved once per resource rather than once per allocation.
+  # pools are resolved once per resource and in a single round trip.
   def self.candidate_counts(allocations, project:)
     return {} if project.nil?
 
-    counts_by_resource = {}
+    filter_based = allocations.select(&:filter_based?)
+    resources = filter_based.filter_map(&:user_resource).uniq(&:id)
+    UserResource.preload_candidate_counts(resources, project:)
 
-    allocations.select(&:filter_based?).to_h do |allocation|
-      count = counts_by_resource.fetch(allocation.user_resource_id) do
-        counts_by_resource[allocation.user_resource_id] = allocation.candidate_count(project:)
-      end
+    counts = resources.to_h { |resource| [resource.id, resource.candidate_count(project:)] }
 
-      [allocation.id, count]
-    end
+    filter_based.to_h { |allocation| [allocation.id, counts.fetch(allocation.user_resource_id, 0)] }
   end
 
   # Users without configured working hours are skipped — their capacity is
@@ -217,20 +215,13 @@ class ResourceAllocation < ApplicationRecord
 
   # Only project members can be allocated, so the stored criteria are always
   # narrowed to the project's members. Callers that already hold the project pass
-  # it in to avoid loading the entity. Applying the membership filter last means a
-  # `member` value smuggled into the stored filter is overwritten, not honoured.
+  # it in to avoid loading the entity.
   def candidate_query(project: self.project)
-    query = user_resource&.candidate_query
-    query.where(:member, "=", [project.id.to_s]) if project
+    user_resource&.candidate_query(project:)
   end
 
-  # Resolving the query can fail for an incompletely configured filter; a single
-  # broken filter must not take down the whole view it is rendered in.
   def candidate_count(project: self.project)
-    candidate_query(project:).results.count
-  rescue StandardError => e
-    Rails.logger.warn("Candidate count for resource allocation #{id} failed: #{e.class}: #{e.message}")
-    0
+    user_resource&.candidate_count(project:) || 0
   end
 
   def allocated_hours
