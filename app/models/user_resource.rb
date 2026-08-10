@@ -45,7 +45,9 @@ class UserResource < Principal
   validates :name, length: { maximum: 256 }
 
   has_details_table(foreign_key: :principal_id) do
-    serialize :user_filter, coder: Queries::Serialization::Filters.new(UserQuery)
+    # Deferred: the API mounts this model at boot, and loading UserQuery reads
+    # the schema, which fails while there is no database yet (db:create).
+    serialize :user_filter, coder: Queries::Serialization::Filters.new(-> { UserQuery })
 
     # A resource without filters would match every user in the instance, which
     # is never what someone means to request.
