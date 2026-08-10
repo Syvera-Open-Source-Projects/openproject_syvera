@@ -445,7 +445,6 @@ module ::ResourceManagement
       UserResource.visible(current_user).find_by(id: user_resource_id)
     end
 
-
     def preselected_work_package
       return @preselected_work_package if defined?(@preselected_work_package)
 
