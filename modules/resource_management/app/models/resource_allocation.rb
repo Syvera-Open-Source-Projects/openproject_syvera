@@ -116,16 +116,17 @@ class ResourceAllocation < ApplicationRecord
   end
 
   # Counts the candidates each filter-based allocation selects, keyed by
-  # allocation id. Allocations commonly share a stored filter, so the candidate
-  # pool is resolved once per distinct filter rather than once per allocation.
+  # allocation id. Allocations commonly request the same user resource, so the
+  # candidate pool is resolved once per resource rather than once per allocation.
   def self.candidate_counts(allocations, project:)
     return {} if project.nil?
 
-    counts_by_filter = {}
+    counts_by_resource = {}
 
     allocations.select(&:filter_based?).to_h do |allocation|
-      signature = allocation.user_filter.map { |filter| [filter.name, filter.operator, filter.values] }
-      count = counts_by_filter.fetch(signature) { counts_by_filter[signature] = allocation.candidate_count(project:) }
+      count = counts_by_resource.fetch(allocation.user_resource_id) do
+        counts_by_resource[allocation.user_resource_id] = allocation.candidate_count(project:)
+      end
 
       [allocation.id, count]
     end

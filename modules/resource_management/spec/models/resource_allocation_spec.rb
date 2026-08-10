@@ -327,7 +327,8 @@ RSpec.describe ResourceAllocation do
       it "overrides a member filter smuggled into the stored criteria" do
         other_project = create(:project)
         allocation = create(:resource_allocation, :with_user_filter, entity: work_package)
-        allocation.user_filter += UserQuery.new.tap { |q| q.where(:member, "=", [other_project.id.to_s]) }.filters
+        member_filter = UserQuery.new.tap { |q| q.where(:member, "=", [other_project.id.to_s]) }.filters
+        allocation.user_resource.user_filter += member_filter
         member = developer(member_of: project)
         developer(member_of: other_project)
 
