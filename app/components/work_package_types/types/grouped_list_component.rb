@@ -69,6 +69,12 @@ module WorkPackageTypes
         type.variants.detect(&:enabled_in_new_projects?)
       end
 
+      # An administrator sees every project's variants side by side, so an unattributed row
+      # would be indistinguishable from a global one.
+      def owner_label(variant)
+        t("types.index.owned_by", project: variant.project.name)
+      end
+
       def variant_path(variant)
         helpers.scoped_variant_path(:edit_type_details_path, type_id: variant.type_id, variant_id: variant.id)
       end
