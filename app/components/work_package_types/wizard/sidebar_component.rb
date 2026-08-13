@@ -33,10 +33,11 @@ module WorkPackageTypes
     class SidebarComponent < ApplicationComponent
       include OpPrimer::ComponentHelpers
 
-      def initialize(type:, current_step:)
+      def initialize(type:, current_step:, variant: nil)
         super(type)
 
         @current_step = current_step
+        @variant = variant
       end
 
       LEADING_ICONS = {
@@ -59,11 +60,13 @@ module WorkPackageTypes
 
       private
 
-      attr_reader :current_step
+      attr_reader :current_step, :variant
 
       def type = model
 
-      def steps = Steps.all
+      def steps = Steps.available_for(variant)
+
+      def variant_path_args = variant&.path_args || { type_id: type.id }
 
       def leading_icon(step) = LEADING_ICONS.fetch(step)
 
@@ -81,7 +84,16 @@ module WorkPackageTypes
       end
 
       def href_for(step)
-        type_creation_wizard_path(type, step:) if type.persisted?
+        return unless addressable?
+
+        helpers.scoped_variant_path(:type_creation_wizard_path, **variant_path_args, step:)
+      end
+
+      # Until the record the wizard is building exists there is nothing for a step to address.
+      # In a project that record is the variant, which its URLs always name; in administration
+      # a type is being created and the variant segment is optional.
+      def addressable?
+        helpers.variant_scope_project ? variant&.persisted? : type.persisted?
       end
     end
   end

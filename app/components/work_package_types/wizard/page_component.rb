@@ -70,15 +70,17 @@ module WorkPackageTypes
         []
       end
 
+      # A project's settings has no screen for the type itself, so cancelling there returns to
+      # its list of types. Administration returns to the type that was being created.
       def cancel_href
-        return types_path unless type.persisted?
+        return helpers.scoped_variant_path(:types_path) if helpers.variant_scope_project || !type.persisted?
 
-        edit_type_details_path(type_id: type.id)
+        helpers.scoped_variant_path(:edit_type_details_path, type_id: type.id)
       end
 
       def step_title = Steps.title(current_step)
 
-      def step_url = type_creation_wizard_path(**variant_path_args, step: current_step)
+      def step_url = helpers.scoped_variant_path(:type_creation_wizard_path, **variant_path_args, step: current_step)
 
       # A type still being created has no variant to address yet.
       def variant_path_args = variant&.path_args || { type_id: type.id }
@@ -86,7 +88,9 @@ module WorkPackageTypes
       def step_form_url
         return step_url if record_persisted?
 
-        adding_variant? ? creation_wizard_types_path(type_id: type.id) : creation_wizard_types_path
+        return helpers.scoped_variant_path(:creation_wizard_types_path, type_id: type.id) if adding_variant?
+
+        helpers.scoped_variant_path(:creation_wizard_types_path)
       end
 
       def step_form_method
