@@ -31,11 +31,9 @@
 module WorkPackageTypes
   class PdfExportTemplateController < ApplicationController
     include AddressesVariant
+    include ::WorkPackageTypes::ConfiguredInScope
     include OpTurbo::ComponentStream
 
-    layout "admin"
-
-    before_action :require_admin
     before_action :find_type, only: %i[edit toggle drop enable_all disable_all update_artefact_export]
     before_action :find_variant, only: %i[edit toggle drop enable_all disable_all update_artefact_export]
     before_action :find_template, only: %i[toggle drop]

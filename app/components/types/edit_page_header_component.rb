@@ -57,21 +57,7 @@ module Types
 
     def scope_project = helpers.variant_scope_project
 
-    # Where the screen was reached from decides the trail: administration's own root, or the
-    # settings of the project whose variant this is.
-    def root_breadcrumb_items
-      return administration_breadcrumb_items if scope_project.nil?
-
-      [{ href: project_overview_path(scope_project.id), text: scope_project.name },
-       { href: project_settings_general_path(scope_project.id), text: t("label_project_settings") },
-       { href: project_settings_work_packages_types_path(scope_project), text: t(:label_work_package_plural) }]
-    end
-
-    def administration_breadcrumb_items
-      [{ href: admin_index_path, text: t("label_administration") },
-       { href: admin_settings_work_packages_general_path, text: t(:label_work_package_plural) },
-       { href: types_path, text: t(:label_type_plural) }]
-    end
+    def root_breadcrumb_items = helpers.variant_scope_breadcrumb_roots
 
     # The type's own configuration belongs to administration, so from a project the parent leads
     # back to that project's list of types — where its variants are — rather than to a screen

@@ -33,6 +33,7 @@ module WorkPackageTypes
     include TypeVariantsFeature
 
     before_action :require_type_variants_feature
+    administration_only! :make_default, :remove_default
 
     current_menu_item do
       :types
@@ -46,9 +47,11 @@ module WorkPackageTypes
       service_call = DeleteVariantService.new(user: current_user, model: named_variant).call
 
       if service_call.success?
-        redirect_to types_path, notice: t(:notice_successful_delete), status: :see_other
+        redirect_to helpers.variant_scope_types_path, notice: t(:notice_successful_delete), status: :see_other
       else
-        redirect_to types_path, alert: service_call.errors.full_messages.to_sentence, status: :see_other
+        redirect_to helpers.variant_scope_types_path,
+                    alert: service_call.errors.full_messages.to_sentence,
+                    status: :see_other
       end
     end
 
@@ -83,8 +86,13 @@ module WorkPackageTypes
       redirect_to types_path, status: :see_other
     end
 
+    # Narrowed to what the caller may address: a project reaches only the variants it owns, so
+    # another project's is absent rather than refused after the fact by the contract.
     def named_variant
-      @type.variants.non_default_variants.find(params.expect(:id))
+      addressable = @type.variants.non_default_variants
+      addressable = addressable.owned_by(variant_scope_project) if variant_scope_project
+
+      addressable.find(params.expect(:id))
     end
   end
 end

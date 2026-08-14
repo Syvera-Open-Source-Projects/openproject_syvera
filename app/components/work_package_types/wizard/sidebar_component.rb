@@ -86,7 +86,7 @@ module WorkPackageTypes
       def href_for(step)
         return unless addressable?
 
-        helpers.scoped_variant_path(:type_creation_wizard_path, **variant_path_args, step:)
+        helpers.type_creation_wizard_path(**variant_path_args, step:)
       end
 
       # Until the record the wizard is building exists there is nothing for a step to address.
