@@ -47,6 +47,7 @@ import {
 } from './sortable-lists/drag-and-drop';
 import {
   captureRowPositions,
+  isOrderableItem,
   reorderRows,
   resolveDirectionalPreviousItemId,
   resolveItemId,
@@ -61,23 +62,27 @@ import {
   type MoveAvailability,
   type MoveDirection,
 } from './sortable-lists/list-dom';
+import { SelectionOrchestrator, type SelectionHost } from './sortable-lists/selection-orchestrator';
 
 type CleanupFn = () => void;
 type ElementDropPayload = ElementEventPayloadMap['onDrop'];
 type MoveResult = { ok:true }|{ ok:false; showToast:boolean };
 interface MoveAnnouncementContext { label:string|null; listName:string|null; crossList:boolean }
 
-export default class SortableListsController extends Controller<HTMLElement> implements SortableListsRoot {
+export default class SortableListsController extends Controller<HTMLElement> implements SortableListsRoot, SelectionHost {
   static outlets = ['sortable-lists--list', 'sortable-lists--item', 'sortable-lists--scrollable'];
 
   static values = {
     moveUrlTemplate: String,
     moveUrlTemplates: Object,
     optimistic: { type: Boolean, default: false },
+    selectionEnabled: { type: Boolean, default: false },
+    announcementScope: { type: String, default: 'js.sortable_lists.selection' },
+    selectionDescriptionId: { type: String, default: '' },
   };
 
   declare readonly sortableListsListOutlets:import('./sortable-lists/list.controller').default[];
-  declare readonly sortableListsItemOutlets:RootAwareChild[];
+  declare readonly sortableListsItemOutlets:(RootAwareChild & { focusItem():void })[];
   declare readonly sortableListsScrollableOutlets:RootAwareChild[];
 
   declare readonly moveUrlTemplateValue:string;
@@ -85,9 +90,15 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   declare readonly moveUrlTemplatesValue:Record<string, string>;
   declare readonly hasMoveUrlTemplatesValue:boolean;
   declare readonly optimisticValue:boolean;
+  declare readonly selectionEnabledValue:boolean;
+  declare readonly announcementScopeValue:string;
+  declare readonly selectionDescriptionIdValue:string;
+
+  private selection?:SelectionOrchestrator;
 
   private monitorCleanupFn?:CleanupFn;
   private healScheduled = false;
+
 
   connect():void {
     this.monitorCleanupFn = monitorForElements({
@@ -99,12 +110,93 @@ export default class SortableListsController extends Controller<HTMLElement> imp
       },
     });
     this.element.addEventListener('turbo:morph-element', this.scheduleRegistrationHeal);
+
+    // Constructed only for a consumer that opted in, and the listeners go up
+    // with it. A root that never opted in therefore has nothing attached to
+    // swallow a keystroke with, rather than attaching handlers that return
+    // early — the difference matters for a viewer, whose Space and arrows
+    // must keep scrolling the page.
+    if (this.selectionEnabledValue) {
+      this.selection = new SelectionOrchestrator(this);
+      // Capture phase, at the root: a modified gesture has to be consumed
+      // before the card's own navigation listener sees it, and doing that
+      // here does not depend on which controller connected first.
+      this.element.addEventListener('click', this.onSelectionClick, true);
+      this.element.addEventListener('keydown', this.onSelectionKeydown, true);
+      // Escape listens at the document, in the bubble phase: clearing the
+      // selection must not depend on focus sitting on a card row, and an
+      // overlay's own Escape has to run first so it can be respected.
+      document.addEventListener('keydown', this.onSelectionEscape);
+      // A restored page brings its markup back but not this controller's
+      // model, so any batch presentation already in the DOM at connect time
+      // is left over from whoever was cached — clear it rather than let it
+      // claim a selection nothing holds.
+      //
+      // Deliberately not `turbo:before-cache`: that fires for every visit,
+      // including the details-pane navigation that morphs this page in
+      // place. Clearing there strips the highlight from a live page whose
+      // controller never went away, which is exactly what AC-7 forbids.
+      this.selection.clearPresentation();
+    }
   }
 
   disconnect():void {
     this.element.removeEventListener('turbo:morph-element', this.scheduleRegistrationHeal);
+    this.element.removeEventListener('click', this.onSelectionClick, true);
+    this.element.removeEventListener('keydown', this.onSelectionKeydown, true);
+    document.removeEventListener('keydown', this.onSelectionEscape);
     this.monitorCleanupFn?.();
     this.monitorCleanupFn = undefined;
+    this.selection?.teardown();
+    this.selection = undefined;
+  }
+
+
+  private readonly onSelectionClick = (event:MouseEvent):void => {
+    this.selection?.handleClick(event);
+  };
+
+  private readonly onSelectionKeydown = (event:KeyboardEvent):void => {
+    this.selection?.handleKeydown(event);
+  };
+
+  private readonly onSelectionEscape = (event:KeyboardEvent):void => {
+    this.selection?.handleEscape(event);
+  };
+
+  // SelectionHost. The orchestrator reads root state and asks for focus; it
+  // never learns that any of this is Stimulus.
+  get rootElement():HTMLElement {
+    return this.element;
+  }
+
+  get announcementScope():string {
+    return this.announcementScopeValue;
+  }
+
+  get descriptionId():string {
+    return this.selectionDescriptionIdValue;
+  }
+
+  // Focus is applied through the item's own outlet so the consumer decides
+  // which element inside the row actually holds the tab stop.
+  focusItem(target:HTMLElement):void {
+    const outlet = this.sortableListsItemOutlets.find((item) => item.element === target);
+
+    if (outlet) {
+      outlet.focusItem();
+    } else {
+      target.focus();
+    }
+  }
+
+  // Live ordered membership, for AGILE-278's batch move.
+  selectedIds():string[] {
+    return this.selection?.selectedIds() ?? [];
+  }
+
+  collapseSelectionForDrag(itemElement:HTMLElement):void {
+    this.selection?.collapseForDrag(itemElement);
   }
 
   // A morph desyncs the children's drag-and-drop state in two ways. Stimulus
@@ -144,6 +236,20 @@ export default class SortableListsController extends Controller<HTMLElement> imp
         child.connectRoot(this);
         child.reregister();
       });
+
+      // Reconciliation happens once per morph batch rather than per
+      // disconnect: a morph can replace a row with a fresh element for the
+      // same work package, and reacting to the disconnect alone would drop a
+      // member that is about to come straight back.
+      // Presentation is re-synced on every morph regardless of whether prune
+      // dropped anything: a morph can strip or preserve the marker attribute
+      // independently of the model, so the DOM has to be brought back in
+      // line either way. Routing through renderSelection rather than calling
+      // applySelectionPresentation and renderSelectionCount directly means a
+      // prune that actually removes a selected member announces the new
+      // count through the same rule as every other selection change, instead
+      // of a second, easily-missed announcement path.
+      this.selection?.reconcile();
     });
   };
 
@@ -187,7 +293,11 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   }
 
   moveInDirection(itemElement:HTMLElement, direction:MoveDirection):void {
-    if (this.busy) {
+    // Defence in depth. The menu is rendered server-side from a permission
+    // check that does not know about per-work-package movability, so a stale
+    // or over-permissive menu must not be able to execute a move the server
+    // will refuse.
+    if (this.busy || !isOrderableItem(itemElement)) {
       return;
     }
 
@@ -211,6 +321,12 @@ export default class SortableListsController extends Controller<HTMLElement> imp
     if (!moveUrl || !sourceRow) {
       return;
     }
+
+    // Last, after every resolution above has succeeded. Several of those
+    // steps bail — an unavailable direction, no owner list, no move URL —
+    // and collapsing earlier would destroy the batch for a menu action that
+    // then does nothing at all.
+    this.selection?.collapseForMove(itemElement);
 
     void this.performMove({
       sourceRow,
@@ -483,4 +599,5 @@ export default class SortableListsController extends Controller<HTMLElement> imp
 
     void announce(message, { politeness: 'assertive' });
   }
+
 }

@@ -89,6 +89,10 @@ export interface SortableListData extends Record<string|symbol, unknown> {
 // Implemented by the sortable-lists root controller and handed to list/item
 // controllers via outlet callbacks, so children read shared state through a
 // typed reference instead of walking the DOM.
+//
+// Selection is deliberately absent: no child branches on whether the root
+// has it, and it now lives behind SelectionOrchestrator rather than being
+// root state children could read.
 export interface SortableListsRoot {
   readonly element:HTMLElement;
   readonly busy:boolean;
@@ -101,6 +105,10 @@ export interface SortableListsRoot {
   // The rows container of the item's innermost owning list, or null when the
   // item is not (yet) inside a list the root knows about.
   ownerRowsContainer(itemElement:HTMLElement):HTMLElement|null;
+  // Called when a drag begins. Until AGILE-278 lands, a drag moves exactly one
+  // item, so it collapses any wider batch onto the dragged card rather than
+  // implying that the rest came along.
+  collapseSelectionForDrag(itemElement:HTMLElement):void;
 }
 
 // Implemented by the list, item and scrollable controllers so the root can
