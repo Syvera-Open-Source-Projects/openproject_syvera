@@ -2521,6 +2521,32 @@ describe('Sortable lists controller', () => {
 
         expect(root.querySelectorAll('[data-dragging]')).toHaveLength(0);
       });
+
+      // A Turbo morph mid-drag can replace a batch-mate's row with a fresh
+      // element for the same work package (see "registration heal after a
+      // morph" above); that fresh element never received markDraggingRows's
+      // setAttribute call, so it arrives unmarked even though it is still
+      // part of the frozen batch. The heal must re-apply the mark, or the
+      // replaced row looks undragged for the rest of the drag.
+      it('re-marks a batch-mate row a mid-drag morph replaced', async () => {
+        selectItems(item1, item3);
+        beginDrag(item1);
+
+        // A real morph-replaced node arrives from server HTML, so it never
+        // carries the in-memory dragging mark: strip it from the clone to
+        // simulate that, rather than accidentally inheriting it as-is.
+        const replacement = item3.cloneNode(true) as HTMLElement;
+        replacement.removeAttribute('data-dragging');
+        item3.replaceWith(replacement);
+        replacement.dispatchEvent(new CustomEvent('turbo:morph-element', { bubbles: true }));
+        await Promise.resolve();
+
+        expect(replacement.getAttribute('data-dragging')).toBe('source');
+
+        await completeDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        expect(root.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      });
     });
 
     describe('batch announcements', () => {

@@ -313,6 +313,17 @@ export default class SortableListsController extends Controller<HTMLElement> imp
       // count through the same rule as every other selection change, instead
       // of a second, easily-missed announcement path.
       this.selection?.reconcile();
+
+      // A row a morph replaces mid-drag loses data-dragging along with the
+      // rest of its old element (see markDraggingRows/clearDraggingRows
+      // above), because the replacement is fresh server HTML that never went
+      // through beginDragBatch. Re-apply the mark to the frozen batch here so
+      // a mid-drag Turbo update never leaves a batch-mate looking undragged.
+      // markDraggingRows already tolerates an id it cannot resolve, exactly
+      // as beginDragBatch relies on.
+      if (this.activeDragBatch) {
+        this.markDraggingRows(this.activeDragBatch);
+      }
     });
   };
 
