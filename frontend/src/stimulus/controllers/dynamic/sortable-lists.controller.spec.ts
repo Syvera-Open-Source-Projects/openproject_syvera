@@ -55,6 +55,7 @@ vi.doMock('@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-prev
   setCustomNativeDragPreview: vi.fn(),
 }));
 
+import { attachClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import type { monitorForElements as monitorForElementsFn } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { waitFor } from '@testing-library/dom';
 import { type Mock, type MockInstance } from 'vitest';
@@ -89,7 +90,7 @@ describe('Sortable lists controller', () => {
     ({ sortableItemData, sortableListData } = await import('./sortable-lists/drag-and-drop'));
   });
 
-  function input() {
+  function input({ clientY = 10 }:{ clientY?:number } = {}) {
     return {
       altKey: false,
       button: 0,
@@ -98,9 +99,26 @@ describe('Sortable lists controller', () => {
       metaKey: false,
       shiftKey: false,
       clientX: 10,
-      clientY: 10,
+      clientY,
       pageX: 10,
-      pageY: 10,
+      pageY: clientY,
+    };
+  }
+
+  // A fixed-size hit box for attachClosestEdge to resolve 'top' or 'bottom'
+  // against; paired with input({ clientY }) below (10 reads as 'top', 90 as
+  // 'bottom' against this box).
+  function rect():DOMRect {
+    return {
+      top: 0,
+      bottom: 100,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
     };
   }
 
@@ -121,7 +139,13 @@ describe('Sortable lists controller', () => {
     moveUrlTemplate = '/move/{id}',
     optimistic = false,
     selectionEnabled = false,
-  }:{ moveUrlTemplate?:string|null; optimistic?:boolean; selectionEnabled?:boolean } = {}) {
+    collectionMoveUrl = null,
+  }:{
+    moveUrlTemplate?:string|null;
+    optimistic?:boolean;
+    selectionEnabled?:boolean;
+    collectionMoveUrl?:string|null;
+  } = {}) {
     fixture.innerHTML = `
       <div
         id="sortable-root"
@@ -129,6 +153,7 @@ describe('Sortable lists controller', () => {
         ${moveUrlTemplate ? `data-sortable-lists-move-url-template-value="${moveUrlTemplate}"` : ''}
         ${optimistic ? 'data-sortable-lists-optimistic-value="true"' : ''}
         ${selectionEnabled ? 'data-sortable-lists-selection-enabled-value="true"' : ''}
+        ${collectionMoveUrl ? `data-sortable-lists-collection-move-url-value="${collectionMoveUrl}"` : ''}
         data-sortable-lists-sortable-lists--list-outlet="#sortable-root [data-controller~='sortable-lists--list']"
         data-sortable-lists-sortable-lists--item-outlet="#sortable-root [data-controller~='sortable-lists--item']"
         data-sortable-lists-sortable-lists--scrollable-outlet="#sortable-root [data-controller~='sortable-lists--scrollable']"
@@ -335,8 +360,16 @@ describe('Sortable lists controller', () => {
   // otherwise look "interactive" to a naive descendant check.
   function renderSelectableRoot({
     moveUrlTemplate = '/move/{id}',
-  }:{ moveUrlTemplate?:string|null } = {}) {
-    const fixtureElements = renderFixture({ moveUrlTemplate, selectionEnabled: true });
+    optimistic = false,
+    collectionMoveUrl = null,
+  }:{
+    moveUrlTemplate?:string|null;
+    optimistic?:boolean;
+    collectionMoveUrl?:string|null;
+  } = {}) {
+    const fixtureElements = renderFixture({
+      moveUrlTemplate, selectionEnabled: true, optimistic, collectionMoveUrl,
+    });
     fixtureElements.items.forEach((item) => item.setAttribute('tabindex', '0'));
 
     return fixtureElements;
@@ -370,13 +403,35 @@ describe('Sortable lists controller', () => {
     window.I18n.store({
       en: {
         js: {
+          // A distinguishable scope of its own (not just a copy of
+          // sortable_lists.announcements) so a test asserting the consumer
+          // scope was actually consulted cannot pass by accident against the
+          // default scope's wording.
+          backlogs: {
+            announcements: {
+              fallback_item_label: 'Work package',
+              fallback_list_name: 'another list',
+              move_failed_check_position: 'Move failed. Check the work package\'s current position.',
+              move_failed_check_positions_batch: 'Move failed. Check the work packages\' current positions.',
+              move_failed_rolled_back: 'Move failed. %{label} returned to its previous position.',
+              move_failed_rolled_back_batch: 'Move failed. %{count} work packages returned to their previous positions.',
+              moved: '%{label} work package moved to position %{position} of %{total}',
+              moved_batch: '%{count} work packages moved to positions %{first} through %{last} of %{total}',
+              moved_batch_to_list: '%{count} work packages moved to %{list}, positions %{first} through %{last} of %{total}',
+              moved_to_list: '%{label} moved to %{list}, position %{position} of %{total}',
+            },
+          },
           sortable_lists: {
             announcements: {
               fallback_item_label: 'Item',
               fallback_list_name: 'another list',
               move_failed_check_position: 'Move failed. Check the item\'s current position.',
+              move_failed_check_positions_batch: 'Move failed. Check the items\' current positions.',
               move_failed_rolled_back: 'Move failed. %{label} returned to its previous position.',
+              move_failed_rolled_back_batch: 'Move failed. %{count} items returned to their previous positions.',
               moved: '%{label} moved to position %{position} of %{total}',
+              moved_batch: '%{count} items moved to positions %{first} through %{last} of %{total}',
+              moved_batch_to_list: '%{count} items moved to %{list}, positions %{first} through %{last} of %{total}',
               moved_to_list: '%{label} moved to %{list}, position %{position} of %{total}',
             },
             selection: {
@@ -1290,15 +1345,18 @@ describe('Sortable lists controller', () => {
     await ctx.nextFrame();
     const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
 
-    controller.collapseSelectionForDrag(firstSourceItem);
+    controller.beginDragBatch(firstSourceItem);
 
     expect(document.querySelector('[data-batch-selected]')).toBeNull();
   });
 
-  // Same reasoning as the plain-click collapse above: a drag that starts on
-  // one card out of a larger batch silently narrows the selection to that
-  // one card, and a screen-reader user needs to hear the count change.
-  it('announces the new count when a drag collapses a multi-card batch', async () => {
+  // Same reasoning as the plain-click collapse above, but for a drag: a card
+  // that is NOT part of an existing batch collapses it onto that one card
+  // (the AGILE-181 rule), and a screen-reader user needs to hear the count
+  // change. Dragging a card that IS already part of the batch instead
+  // carries the whole batch along — see the "batch dragging" describe block
+  // below, which is what AGILE-278 adds on top of this collapse rule.
+  it('announces the new count when dragging a card outside the batch collapses it', async () => {
     const { root, items } = renderSelectableRoot();
     await ctx.nextFrame();
     const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
@@ -1307,9 +1365,9 @@ describe('Sortable lists controller', () => {
     items[2].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true }));
     announceSpy.mockClear();
 
-    controller.collapseSelectionForDrag(items[0]);
+    controller.beginDragBatch(items[3]);
 
-    expect(items.filter((item) => item.hasAttribute('data-batch-selected'))).toEqual([items[0]]);
+    expect(items.filter((item) => item.hasAttribute('data-batch-selected'))).toEqual([items[3]]);
     expect(announceSpy.mock.calls.map((call) => [call[0], call[1]])).toEqual([
       ['1 item selected.', { politeness: 'polite' }],
     ]);
@@ -2128,6 +2186,414 @@ describe('Sortable lists controller', () => {
 
       expect(isSelected(items[0])).toBe(false);
       expect(isSelected(items[2])).toBe(true);
+    });
+  });
+
+  describe('batch dragging', () => {
+    let root:HTMLElement;
+    let list1:HTMLElement;
+    let list2:HTMLElement;
+    let item1:HTMLElement;
+    let item2:HTMLElement;
+    let item3:HTMLElement;
+    let controller:SortableListsControllerType;
+
+    beforeEach(async () => {
+      const fixtureElements = renderSelectableRoot({
+        moveUrlTemplate: '/move/{id}',
+        optimistic: true,
+        collectionMoveUrl: '/collection-move-url',
+      });
+      root = fixtureElements.root;
+      list1 = fixtureElements.sourceList;
+      list2 = fixtureElements.targetList;
+      item1 = list1.querySelector<HTMLElement>('[data-sortable-lists--item-id-value="1"]')!;
+      item2 = list1.querySelector<HTMLElement>('[data-sortable-lists--item-id-value="2"]')!;
+      item3 = list1.querySelector<HTMLElement>('[data-sortable-lists--item-id-value="3"]')!;
+
+      await ctx.nextFrame();
+      controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+    });
+
+    function selectItems(...selected:HTMLElement[]) {
+      click(selected[0]);
+      selected.slice(1).forEach((item) => click(item, { metaKey: true }));
+    }
+
+    function rowIdsIn(list:HTMLElement):string[] {
+      return itemIds(list);
+    }
+
+    function selectedRowIds():string[] {
+      return Array.from(root.querySelectorAll<HTMLElement>('[data-batch-selected]'))
+        .map((element) => element.getAttribute('data-sortable-lists--item-id-value')!);
+    }
+
+    // Mirrors item.controller.ts's onDragStart: the root freezes the batch
+    // this drag represents before anything else can happen to it.
+    function beginDrag(source:HTMLElement) {
+      controller.beginDragBatch(source);
+    }
+
+    function batchDropTargets({ targetList, targetItem, edge }:{
+      targetList:HTMLElement;
+      targetItem:HTMLElement|null;
+      edge:'top'|'bottom'|null;
+    }) {
+      const dropTargets:ReturnType<typeof dropTargetRecord>[] = [];
+
+      if (targetItem && edge) {
+        vi.spyOn(targetItem, 'getBoundingClientRect').mockReturnValue(rect());
+        const targetItemId = targetItem.getAttribute('data-sortable-lists--item-id-value')!;
+        const data = attachClosestEdge(sortableItemData({ itemId: targetItemId, type: 'work_package' }), {
+          element: targetItem,
+          input: input({ clientY: edge === 'bottom' ? 90 : 10 }),
+          allowedEdges: ['top', 'bottom'],
+        });
+        dropTargets.push(dropTargetRecord(targetItem, data));
+      }
+
+      dropTargets.push(dropTargetRecord(targetList, sortableListData({
+        type: targetList.getAttribute('data-sortable-lists--list-type-value')!,
+        listId: targetList.getAttribute('data-sortable-lists--list-id-value'),
+        name: targetList.getAttribute('data-sortable-lists--list-name-value'),
+      })));
+
+      return dropTargets;
+    }
+
+    // The second half of simulateDrop, split out so a test can mutate the
+    // DOM between drag start (beginDrag) and this.
+    async function completeDrop({ source, targetList, targetItem, edge }:{
+      source:HTMLElement;
+      targetList:HTMLElement;
+      targetItem:HTMLElement|null;
+      edge:'top'|'bottom'|null;
+    }) {
+      const monitorOptions = vi.mocked(monitorForElements).mock.lastCall?.[0];
+      const sourceId = source.getAttribute('data-sortable-lists--item-id-value')!;
+
+      monitorOptions?.onDrop?.({
+        source: sourcePayload(source, itemData(sourceId, 'work_package')),
+        location: {
+          initial: { dropTargets: [], input: input() },
+          current: { dropTargets: batchDropTargets({ targetList, targetItem, edge }), input: input() },
+          previous: { dropTargets: [] },
+        },
+      });
+
+      await flushPromises();
+    }
+
+    async function simulateDrop(args:{
+      source:HTMLElement;
+      targetList:HTMLElement;
+      targetItem:HTMLElement|null;
+      edge:'top'|'bottom'|null;
+    }) {
+      beginDrag(args.source);
+      await completeDrop(args);
+    }
+
+    // A drag released outside every registered drop target (Escape, or a
+    // genuine drop on unrelated page furniture) resolves no drop targets at
+    // all; onDrop still fires, and resolveDropIntent returns null.
+    async function simulateCancelledDrop({ source }:{ source:HTMLElement }) {
+      beginDrag(source);
+      const monitorOptions = vi.mocked(monitorForElements).mock.lastCall?.[0];
+      const sourceId = source.getAttribute('data-sortable-lists--item-id-value')!;
+
+      monitorOptions?.onDrop?.({
+        source: sourcePayload(source, itemData(sourceId, 'work_package')),
+        location: {
+          initial: { dropTargets: [], input: input() },
+          current: { dropTargets: [], input: input() },
+          previous: { dropTargets: [] },
+        },
+      });
+
+      await flushPromises();
+    }
+
+    it('moves every selected row and PUTs ordered ids to the collection URL', async () => {
+      selectItems(item1, item3);
+
+      await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      const options = fetchMock.mock.calls[0][1] as { body:FormData };
+      expect(url).toContain('/collection-move-url');
+      expect(url).toContain('optimistic=true');
+      const body = options.body;
+      expect(body.getAll('ids[]')).toEqual(['1', '3']);
+      expect(body.get('prev_id')).toBe('2');
+      // both rows moved contiguously after item 2:
+      expect(rowIdsIn(list1)).toEqual(['2', '1', '3']);
+    });
+
+    it('drags an unselected card alone through the collection URL', async () => {
+      // select item 3, drag item 2: it is not part of the batch, so it
+      // collapses any selection onto itself and moves alone.
+      selectItems(item3);
+
+      await simulateDrop({ source: item2, targetList: list1, targetItem: item1, edge: 'top' });
+
+      const body = (fetchMock.mock.calls[0][1].body) as FormData;
+      expect(body.getAll('ids[]')).toEqual(['2']);
+    });
+
+    // Batch = {1, 3}; dropping "top" on item 2 asks for item 2's own
+    // predecessor, and the only candidate (item 1) is itself part of the
+    // batch. Naively that would return '1'; excluding batch members must
+    // fall through past it to blank (top of list), since nothing else
+    // precedes item 1. (A batch dropped right where it already sits is a
+    // no-op the request-suppression test below covers separately, so this
+    // drops between the two batch members instead of beside them.)
+    it('excludes selected rows when resolving the predecessor', async () => {
+      selectItems(item1, item3);
+
+      await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'top' });
+
+      const body = (fetchMock.mock.calls[0][1].body) as FormData;
+      expect(body.get('prev_id')).toBe('');
+    });
+
+    it('suppresses a block no-op without a request', async () => {
+      // select 1 and 2 (already contiguous at top), drop 1 at the top again.
+      selectItems(item1, item2);
+
+      await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'top' });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rolls the whole block back on failure and keeps the selection', async () => {
+      selectItems(item1, item3);
+      fetchMock.mockResolvedValueOnce(new Response('', { status: 500 }));
+
+      await simulateDrop({ source: item1, targetList: list2, targetItem: null, edge: null });
+
+      expect(rowIdsIn(list1)).toEqual(['1', '2', '3']);
+      // selection preserved for retry:
+      expect(selectedRowIds()).toEqual(['1', '3']);
+    });
+
+    it('clears the frozen batch when a drag is cancelled', async () => {
+      // simulate a drop that resolves no intent (dropTargets: []), then a
+      // fresh singular drag of item 2 — the stale batch must not leak in.
+      await simulateCancelledDrop({ source: item1 });
+      await simulateDrop({ source: item2, targetList: list1, targetItem: item3, edge: 'bottom' });
+
+      const body = (fetchMock.mock.calls[0][1].body) as FormData;
+      expect(body.getAll('ids[]')).toEqual(['2']);
+    });
+
+    it('clears the selection after a successful move', async () => {
+      // select 1 and 3, successful batch drop:
+      selectItems(item1, item3);
+
+      await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+      expect(selectedRowIds()).toEqual([]);
+    });
+
+    it('keeps the selection when the move fails', async () => {
+      selectItems(item1, item3);
+      fetchMock.mockResolvedValueOnce(new Response('', { status: 500 }));
+
+      await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+      expect(selectedRowIds()).toEqual(['1', '3']);
+    });
+
+    it('aborts when a frozen member row vanished mid-drag', async () => {
+      // select 1 and 3; begin the drag of item 1; remove item 3's row from
+      // the DOM (as a mid-drag morph would); then complete the drop.
+      selectItems(item1, item3);
+      beginDrag(item1);
+      item3.remove();
+
+      await completeDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+      // No request, no partial DOM move:
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(rowIdsIn(list1)).toEqual(['1', '2']);
+
+      // The snapshot was still consumed — a following singular drag is clean:
+      await simulateDrop({ source: item2, targetList: list1, targetItem: item1, edge: 'top' });
+      const body = (fetchMock.mock.calls[0][1].body) as FormData;
+      expect(body.getAll('ids[]')).toEqual(['2']);
+    });
+
+    // The approved design: every source row the drag represents carries the
+    // dragging treatment, not just the row the pointer grabbed.
+    describe('drag presentation', () => {
+      function draggingIds():string[] {
+        return Array.from(root.querySelectorAll<HTMLElement>('[data-dragging]'))
+          .map((element) => element.getAttribute('data-sortable-lists--item-id-value')!);
+      }
+
+      it('marks every selected row as the drag source when the batch begins', () => {
+        selectItems(item1, item3);
+
+        beginDrag(item1);
+
+        expect(draggingIds().sort()).toEqual(['1', '3']);
+      });
+
+      it('marks only the dragged row when it is not part of a selection', () => {
+        selectItems(item3);
+
+        beginDrag(item2);
+
+        expect(draggingIds()).toEqual(['2']);
+      });
+
+      // Mirrors the ordering constraint: onGenerateDragPreview and onDragStart
+      // both call beginDragBatch, so a second call for the same drag must
+      // re-mark the same rows rather than compounding or losing them.
+      it('re-marks the same rows idempotently on a repeated beginDragBatch call', () => {
+        selectItems(item1, item3);
+
+        beginDrag(item1);
+        beginDrag(item1);
+
+        expect(draggingIds().sort()).toEqual(['1', '3']);
+      });
+
+      it('freezes the same batch idempotently for a repeated call on a selected card', async () => {
+        selectItems(item1, item3);
+
+        beginDrag(item1);
+        beginDrag(item1);
+        await completeDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        const body = (fetchMock.mock.calls[0][1].body) as FormData;
+        expect(body.getAll('ids[]')).toEqual(['1', '3']);
+      });
+
+      it('freezes the same single-id batch idempotently for a repeated call on an unselected card', async () => {
+        selectItems(item3);
+
+        beginDrag(item2);
+        beginDrag(item2);
+        await completeDrop({ source: item2, targetList: list1, targetItem: item1, edge: 'top' });
+
+        const body = (fetchMock.mock.calls[0][1].body) as FormData;
+        expect(body.getAll('ids[]')).toEqual(['2']);
+      });
+
+      it('clears every dragging mark after a completed drop', async () => {
+        selectItems(item1, item3);
+
+        await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        expect(root.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      });
+
+      it('clears every dragging mark after a cancelled drop', async () => {
+        selectItems(item1, item3);
+
+        await simulateCancelledDrop({ source: item1 });
+
+        expect(root.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      });
+
+      it('sweeps dragging marks defensively on disconnect', () => {
+        selectItems(item1, item3);
+        beginDrag(item1);
+
+        controller.disconnect();
+
+        expect(root.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      });
+
+      // A batch-mate row a mid-drag morph replaced loses the attribute along
+      // with the rest of its old element; only a leftover on a row that
+      // survived the morph is left for the sweep to catch. Simulated here by
+      // leaving a stray mark on an element the batch never touched, standing
+      // in for a row Pragmatic's own onDrop cleanup never reached.
+      it('sweeps a leftover mark from a row outside the frozen batch on drop', async () => {
+        selectItems(item1, item3);
+        item2.setAttribute('data-dragging', 'source');
+
+        await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        expect(root.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      });
+    });
+
+    describe('batch announcements', () => {
+      it('announces one batch movement with the block position range', async () => {
+        // a fourth row so the block's position range (2 through 3) reads
+        // distinctly from the list's total (4).
+        list1.append(itemRow('9'));
+        selectItems(item1, item3);
+
+        await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        // list1 reads ['2', '1', '3', '9'] afterwards: the batch lands after
+        // item 2, at positions 2 and 3 of 4.
+        expect(announceSpy).toHaveBeenCalledWith(
+          expect.stringContaining('2 items moved to positions 2 through 3 of 4'),
+          expect.anything(),
+        );
+      });
+
+      // The value is set post-connect: Stimulus Values read the attribute
+      // live rather than through its (async) change-detection channel, so a
+      // synchronous set-then-drop in one test is safe (existing coverage
+      // above relies on the same thing for item-mobility values).
+      it('speaks the consumer scope when moveAnnouncementScope is set', async () => {
+        root.setAttribute('data-sortable-lists-move-announcement-scope-value', 'js.backlogs.announcements');
+
+        // Nothing selected: the frozen batch is empty, so the single
+        // dragged card moves alone through the collection URL — the
+        // singular wording path.
+        await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        expect(announceSpy).toHaveBeenCalledWith(
+          expect.stringContaining('work package moved to position'),
+          expect.anything(),
+        );
+      });
+    });
+
+    describe('failure announcements', () => {
+      it('announces the check-positions warning on a 422 whose rollback is unverified', async () => {
+        selectItems(item1, item3);
+        let resolveMove:(response:Response) => void;
+        fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+          resolveMove = resolve;
+        }));
+
+        await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        // Make the rollback unverifiable: remove one batch row from the DOM
+        // between the request being issued and resolving, as a concurrent
+        // morph would. rowsRemainAt(optimisticPlacement) can then no longer
+        // confirm the block still sits where the optimistic move put it, so
+        // the rollback is skipped rather than attempted against stale rows.
+        item3.remove();
+        resolveMove!(new Response('', { status: 422 }));
+        await flushPromises();
+
+        expect(announceSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Check the items'),
+          expect.anything(),
+        );
+      });
+
+      it('stays silent on a 422 whose rollback verified', async () => {
+        selectItems(item1, item3);
+        fetchMock.mockResolvedValueOnce(new Response('', { status: 422 }));
+
+        await simulateDrop({ source: item1, targetList: list1, targetItem: item2, edge: 'bottom' });
+
+        expect(announceSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('Move failed'), expect.anything(),
+        );
+      });
     });
   });
 });

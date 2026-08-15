@@ -54,14 +54,26 @@ const PREVIEW_STRIPPED_ATTRIBUTES = [
 // `.Box--condensed .Box-card`) would not apply to it otherwise.
 const BOX_DENSITY_VARIANT_CLASSES = ['Box--condensed', 'Box--spacious'] as const;
 
+// The count badge added to a multi-card drag's preview. Styled inline rather
+// than through a stylesheet class, matching this file's own approach for the
+// clone's width and margin above: the preview is a native drag image built
+// outside the page's normal render tree, so it must be legible even where no
+// stylesheet has had a chance to apply to it.
+const BATCH_BADGE_CLASS = 'op-sortable-lists-drag-preview-batch-badge';
+
 export function renderDragPreview({
   previewTarget,
   sourceElement,
   container,
+  batchSize = 1,
 }:{
   previewTarget:HTMLElement;
   sourceElement:HTMLElement;
   container:HTMLElement;
+  // The number of rows the drag represents. The approved design: a batch
+  // larger than one card adds a count badge to the preview so a multi-card
+  // drag reads differently from dragging a single card.
+  batchSize?:number;
 }):void {
   const previewWidth = previewTarget.getBoundingClientRect().width;
   const preview = previewTarget.cloneNode(true) as HTMLElement;
@@ -86,6 +98,41 @@ export function renderDragPreview({
   });
 
   container.append(preview);
+
+  if (batchSize > 1) {
+    // Anchors the badge's absolute positioning to the container itself
+    // rather than whatever ancestor Pragmatic happens to mount it under.
+    container.style.position = 'relative';
+    container.append(renderBatchBadge(preview.ownerDocument, batchSize));
+  }
+}
+
+// Absolutely positioned over the card clone's top-right corner. The
+// container is the preview mount Pragmatic hands render(); giving it
+// position:relative here (rather than assuming the caller already set it)
+// keeps the badge anchored to the card regardless of what else mounts there.
+function renderBatchBadge(document:Document, batchSize:number):HTMLElement {
+  const badge = document.createElement('span');
+  badge.className = BATCH_BADGE_CLASS;
+  badge.textContent = String(batchSize);
+  Object.assign(badge.style, {
+    position: 'absolute',
+    top: '-8px',
+    right: '-8px',
+    minWidth: '20px',
+    height: '20px',
+    padding: '0 6px',
+    borderRadius: '999px',
+    backgroundColor: 'var(--bgColor-emphasis, #1f2328)',
+    color: 'var(--fgColor-onEmphasis, #ffffff)',
+    fontSize: '12px',
+    fontWeight: '600',
+    lineHeight: '20px',
+    textAlign: 'center',
+    boxShadow: 'var(--shadow-floating-medium, 0 1px 3px rgba(0, 0, 0, 0.3))',
+  });
+
+  return badge;
 }
 
 export function sanitizePreview(element:HTMLElement):void {

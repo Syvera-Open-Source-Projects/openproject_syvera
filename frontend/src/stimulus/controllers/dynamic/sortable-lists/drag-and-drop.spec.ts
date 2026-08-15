@@ -212,6 +212,23 @@ describe('sortable lists drag and drop helpers', () => {
       expect(data.get('list_id')).toEqual('');
       expect(data.get('prev_id')).toEqual('');
     });
+
+    it('appends ordered ids for a batch payload', () => {
+      const data = buildMoveFormData({
+        listId: '7', previousItemId: '3', type: 'sprint', itemIds: ['12', '9', '15'],
+      });
+
+      expect(data.getAll('ids[]')).toEqual(['12', '9', '15']);
+      expect(data.get('list_type')).toBe('sprint');
+      expect(data.get('list_id')).toBe('7');
+      expect(data.get('prev_id')).toBe('3');
+    });
+
+    it('omits ids for a singular payload', () => {
+      const data = buildMoveFormData({ listId: '7', previousItemId: null, type: 'sprint' });
+
+      expect(data.getAll('ids[]')).toEqual([]);
+    });
   });
 
   describe('resolvePreviousSortableItemId', () => {
@@ -222,7 +239,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '1', targetItem: target, closestEdge: 'bottom', rowsContainer })).toEqual('3');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['1']), targetItem: target, closestEdge: 'bottom', rowsContainer })).toEqual('3');
     });
 
     it('uses the row item as previous item when the drop target is the row', () => {
@@ -231,7 +248,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '1', targetItem: targetRow, closestEdge: 'bottom', rowsContainer })).toEqual('3');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['1']), targetItem: targetRow, closestEdge: 'bottom', rowsContainer })).toEqual('3');
     });
 
     it('uses the previous row item when dropping on the top edge', () => {
@@ -242,7 +259,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(first, targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '2', targetItem: target, closestEdge: 'top', rowsContainer })).toEqual('1');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['2']), targetItem: target, closestEdge: 'top', rowsContainer })).toEqual('1');
     });
 
     it('uses the previous row item when dropping on the top edge of a row target', () => {
@@ -252,7 +269,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(first, targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '2', targetItem: targetRow, closestEdge: 'top', rowsContainer })).toEqual('1');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['2']), targetItem: targetRow, closestEdge: 'top', rowsContainer })).toEqual('1');
     });
 
     it('treats a missing closest edge as dropping before the target item', () => {
@@ -263,7 +280,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(first, targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '2', targetItem: target, closestEdge: null, rowsContainer })).toEqual('1');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['2']), targetItem: target, closestEdge: null, rowsContainer })).toEqual('1');
     });
 
     it('uses a truncation marker when dropping before a tail item', () => {
@@ -274,7 +291,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(first, showMoreRow('5'), targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '2', targetItem: target, closestEdge: 'top', rowsContainer })).toEqual('5');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['2']), targetItem: target, closestEdge: 'top', rowsContainer })).toEqual('5');
     });
 
     it('skips the source item and uses a preceding truncation marker when resolving the previous item', () => {
@@ -286,7 +303,7 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(first, showMoreRow(), sourceRow, targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '2', targetItem: target, closestEdge: 'top', rowsContainer })).toEqual('hidden-item');
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['2']), targetItem: target, closestEdge: 'top', rowsContainer })).toEqual('hidden-item');
     });
 
     it('returns null when dropping before the first item', () => {
@@ -296,7 +313,48 @@ describe('sortable lists drag and drop helpers', () => {
 
       rowsContainer.append(targetRow);
 
-      expect(resolvePreviousSortableItemId({ sourceItemId: '2', targetItem: target, closestEdge: 'top', rowsContainer })).toBeNull();
+      expect(resolvePreviousSortableItemId({ excludedItemIds: new Set(['2']), targetItem: target, closestEdge: 'top', rowsContainer })).toBeNull();
+    });
+
+    it('skips every excluded id when resolving the previous item', () => {
+      // rows: A, B, C, D — drop with top edge on D while A and C are excluded
+      // (selected): the closest preceding unexcluded item is B.
+      const rowsContainer = document.createElement('ul');
+      const rowA = itemRow('A');
+      const rowB = itemRow('B');
+      const rowC = itemRow('C');
+      const rowD = itemRow('D');
+
+      rowsContainer.append(rowA, rowB, rowC, rowD);
+
+      const result = resolvePreviousSortableItemId({
+        excludedItemIds: new Set(['A', 'C']),
+        targetItem: rowD,
+        closestEdge: 'top',
+        rowsContainer,
+      });
+
+      expect(result).toBe('B');
+    });
+
+    it('refuses an excluded item as bottom-edge anchor', () => {
+      // bottom edge on C, but C is excluded: fall through to the sibling walk.
+      const rowsContainer = document.createElement('ul');
+      const rowA = itemRow('A');
+      const rowB = itemRow('B');
+      const rowC = itemRow('C');
+      const rowD = itemRow('D');
+
+      rowsContainer.append(rowA, rowB, rowC, rowD);
+
+      const result = resolvePreviousSortableItemId({
+        excludedItemIds: new Set(['A', 'C']),
+        targetItem: rowC,
+        closestEdge: 'bottom',
+        rowsContainer,
+      });
+
+      expect(result).toBe('B');
     });
   });
 

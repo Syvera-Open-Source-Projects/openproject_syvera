@@ -115,6 +115,43 @@ export class SelectionOrchestrator {
     this.renderSelection('selection');
   }
 
+  // The batch a beginning drag represents, frozen at this moment: dragging a
+  // selected item carries the whole live-ordered selection; dragging an
+  // unselected item collapses any wider selection onto it (the AGILE-181
+  // rule) and moves it alone. The returned ids are a snapshot — the caller
+  // must not re-read the selection at drop time, or Escape and morphs during
+  // the drag could change what gets submitted.
+  batchForDrag(itemElement:HTMLElement):string[] {
+    const candidate = resolveCandidate(this.host.rootElement, itemElement);
+    if (!candidate?.orderable) {
+      return [];
+    }
+
+    if (this.selection.size > 0 && this.selection.has({ type: candidate.type, id: candidate.id })) {
+      return this.selectedIds();
+    }
+
+    this.collapseForDrag(itemElement);
+    return [candidate.id];
+  }
+
+  // Successful movement clears the batch and its anchor (the approved
+  // anchor lifecycle). Deliberately silent: the move announcement is the
+  // user feedback, and speaking "Selection cleared." right after it would
+  // be noise — renderSelection has no silent mode for a size change, so the
+  // presentation and the render baseline are synced directly. The count and
+  // aria-describedby presentation go through the same
+  // applySelectionPresentation call every render uses.
+  clearAfterMove():void {
+    if (this.selection.size === 0) {
+      return;
+    }
+
+    this.selection.clear();
+    this.syncSelectionPresentation();
+    this.lastRenderedKeys = this.selection.keys;
+  }
+
   readonly handleClick = (event:MouseEvent):void => {
     // Ctrl-click is the secondary click on Apple platforms, where it opens
     // the card's contextual menu and Cmd is the multi-select key instead.

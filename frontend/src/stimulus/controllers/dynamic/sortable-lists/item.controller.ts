@@ -232,10 +232,11 @@ export default class ItemController extends Controller<HTMLElement> implements R
       },
       getInitialData: () => this.getItemData(),
       onDragStart: () => {
-        // One drag moves one item for now, so any wider batch collapses onto
-        // it. AGILE-278 replaces this with a batch drag; until then, nothing
-        // should suggest that the rest of the selection came along.
-        this.root?.collapseSelectionForDrag(this.element);
+        // The root freezes the batch this drag represents: the live
+        // selection when this card is part of it, or this card alone
+        // (collapsing any wider selection) otherwise. Frozen here, at drag
+        // start, so nothing later in the drag can change what gets moved.
+        this.root?.beginDragBatch(this.element);
         // Cancels drops landing outside registered drop targets. This also
         // guards the external data channel: a misdropped card carrying
         // text/uri-list would otherwise navigate the current tab to that URL.
@@ -248,9 +249,20 @@ export default class ItemController extends Controller<HTMLElement> implements R
         this.element.removeAttribute('data-dragging');
       },
       onGenerateDragPreview: ({ location, nativeSetDragImage }) => {
+        // Pragmatic dispatches onGenerateDragPreview before onDragStart (the
+        // native setDragImage call has to happen during the dragstart event),
+        // so the frozen batch has to exist by the time the preview renders.
+        // beginDragBatch is idempotent, and onDragStart below keeps its own
+        // call too, both for handle-less/preview-less items that skip this
+        // callback entirely and as the canonical freeze site.
+        this.root?.beginDragBatch(this.element);
+
         if (!this.hasPreviewTarget) {
           return;
         }
+
+        const frozenBatchCount = this.root?.activeDragBatchCount() ?? 0;
+        const batchSize = frozenBatchCount > 0 ? frozenBatchCount : 1;
 
         setCustomNativeDragPreview({
           nativeSetDragImage,
@@ -262,6 +274,7 @@ export default class ItemController extends Controller<HTMLElement> implements R
             previewTarget: this.previewTarget,
             sourceElement: this.element,
             container,
+            batchSize,
           }),
         });
       },

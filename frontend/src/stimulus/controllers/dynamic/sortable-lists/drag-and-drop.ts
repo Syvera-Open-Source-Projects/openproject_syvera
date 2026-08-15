@@ -105,10 +105,13 @@ export interface SortableListsRoot {
   // The rows container of the item's innermost owning list, or null when the
   // item is not (yet) inside a list the root knows about.
   ownerRowsContainer(itemElement:HTMLElement):HTMLElement|null;
-  // Called when a drag begins. Until AGILE-278 lands, a drag moves exactly one
-  // item, so it collapses any wider batch onto the dragged card rather than
-  // implying that the rest came along.
-  collapseSelectionForDrag(itemElement:HTMLElement):void;
+  // Called when a drag begins. The root freezes the batch this drag
+  // represents: the full selection when the dragged item is part of it,
+  // otherwise the dragged item alone (collapsing any wider selection).
+  beginDragBatch(itemElement:HTMLElement):void;
+  // The size of the batch frozen by the most recent beginDragBatch call, for
+  // the drag preview's count badge; 0 before any drag has begun.
+  activeDragBatchCount():number;
 }
 
 // Implemented by the list, item and scrollable controllers so the root can
@@ -186,13 +189,16 @@ export function buildMoveFormData({
   listId,
   previousItemId,
   type,
+  itemIds = null,
 }:{
   listId:string|null;
   previousItemId:string|null;
   type:string;
+  itemIds?:string[]|null;
 }):FormData {
   const data = new FormData();
 
+  itemIds?.forEach((id) => data.append('ids[]', id));
   data.append('list_type', type);
   data.append('list_id', listId ?? '');
   data.append('prev_id', previousItemId ?? '');
@@ -234,12 +240,12 @@ export function confinementAllowsDrop(
 }
 
 export function resolvePreviousSortableItemId({
-  sourceItemId,
+  excludedItemIds,
   targetItem,
   closestEdge,
   rowsContainer,
 }:{
-  sourceItemId:string;
+  excludedItemIds:ReadonlySet<string>;
   targetItem:HTMLElement;
   closestEdge:Edge|null;
   rowsContainer:Element;
@@ -247,7 +253,7 @@ export function resolvePreviousSortableItemId({
   const targetItemElement = resolveItemElement(targetItem, rowsContainer);
   const targetItemId = targetItemElement ? resolveItemId(targetItemElement) : null;
 
-  if (closestEdge === 'bottom' && targetItemId !== sourceItemId) {
+  if (closestEdge === 'bottom' && targetItemId !== null && !excludedItemIds.has(targetItemId)) {
     return targetItemId;
   }
 
@@ -256,7 +262,7 @@ export function resolvePreviousSortableItemId({
 
   while (row) {
     const itemId = resolvePreviousItemId(row, rowsContainer);
-    if (itemId && itemId !== sourceItemId) {
+    if (itemId && !excludedItemIds.has(itemId)) {
       return itemId;
     }
 
@@ -270,11 +276,11 @@ export function resolvePreviousSortableItemId({
 // the position the target list declares: 'start' inserts before the first row
 // (null previous item), 'end' appends after the last.
 function resolveListOnlyPreviousItemId({
-  sourceItemId,
+  excludedItemIds,
   rowsContainer,
   dropPosition,
 }:{
-  sourceItemId:string;
+  excludedItemIds:ReadonlySet<string>;
   rowsContainer:HTMLElement;
   dropPosition:SortableListDropPosition;
 }):string|null {
@@ -282,7 +288,7 @@ function resolveListOnlyPreviousItemId({
     return null;
   }
 
-  return resolveListAppendPreviousItemId({ sourceItemId, rowsContainer });
+  return resolveListAppendPreviousItemId({ excludedItemIds, rowsContainer });
 }
 
 export interface DropIntent {
@@ -302,10 +308,12 @@ export function resolveDropIntent({
   location,
   root,
   sourceData,
+  excludedItemIds = new Set([sourceData.itemId]),
 }:{
   location:DragLocationHistory;
   root:HTMLElement;
   sourceData:SortableItemData;
+  excludedItemIds?:ReadonlySet<string>;
 }):DropIntent|null {
   const targetItem = location.current.dropTargets.find(
     (target):target is typeof target & { data:SortableItemData; element:HTMLElement } => (
@@ -351,13 +359,13 @@ export function resolveDropIntent({
 
   const previousItemId = targetItem
     ? resolvePreviousSortableItemId({
-      sourceItemId: sourceData.itemId,
+      excludedItemIds,
       targetItem: targetItem.element,
       closestEdge: extractClosestEdge(targetItem.data),
       rowsContainer,
     })
     : resolveListOnlyPreviousItemId({
-      sourceItemId: sourceData.itemId,
+      excludedItemIds,
       rowsContainer,
       dropPosition: listData.dropPosition,
     });

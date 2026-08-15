@@ -478,4 +478,93 @@ describe('SelectionOrchestrator', () => {
     expect(orchestrator.selectedIds()).toEqual(['2']);
     expect(announceSpy).toHaveBeenCalled();
   });
+
+  describe('batchForDrag', () => {
+    it('returns the frozen ordered selection when the dragged item is selected', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      orchestrator.handleClick(clickOn(item('1')));
+      orchestrator.handleClick(clickOn(item('3'), { metaKey: true }));
+
+      expect(orchestrator.batchForDrag(item('1'))).toEqual(['1', '3']);
+      // the selection itself is untouched:
+      expect(orchestrator.selectedIds()).toEqual(['1', '3']);
+    });
+
+    it('collapses onto an unselected dragged item and returns it alone', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      orchestrator.handleClick(clickOn(item('1')));
+      orchestrator.handleClick(clickOn(item('3'), { metaKey: true }));
+
+      expect(orchestrator.batchForDrag(item('2'))).toEqual(['2']);
+      expect(orchestrator.selectedIds()).toEqual(['2']);
+    });
+
+    it('returns the dragged item alone when nothing is selected, without selecting it', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+
+      expect(orchestrator.batchForDrag(item('2'))).toEqual(['2']);
+      expect(orchestrator.selectedIds()).toEqual([]);
+    });
+
+    it('returns empty for a non-orderable item', () => {
+      item('2').setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+
+      expect(orchestrator.batchForDrag(item('2'))).toEqual([]);
+    });
+
+    // Pragmatic DnD calls onGenerateDragPreview before onDragStart, and both
+    // call beginDragBatch; a second call for the same drag must freeze the
+    // same batch rather than compounding a collapse or re-resolving a
+    // different selection.
+    it('is idempotent for a selected item: repeated calls freeze the same batch', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      orchestrator.handleClick(clickOn(item('1')));
+      orchestrator.handleClick(clickOn(item('3'), { metaKey: true }));
+
+      expect(orchestrator.batchForDrag(item('1'))).toEqual(['1', '3']);
+      expect(orchestrator.batchForDrag(item('1'))).toEqual(['1', '3']);
+    });
+
+    // For an unselected item, the first call collapses the wider selection
+    // onto it; the second call then finds it already selected and returns
+    // the same one-id batch rather than collapsing again onto nothing.
+    it('is idempotent for an unselected item: the collapse from the first call sticks', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      orchestrator.handleClick(clickOn(item('1')));
+      orchestrator.handleClick(clickOn(item('3'), { metaKey: true }));
+
+      expect(orchestrator.batchForDrag(item('2'))).toEqual(['2']);
+      expect(orchestrator.batchForDrag(item('2'))).toEqual(['2']);
+    });
+  });
+
+  describe('clearAfterMove', () => {
+    it('clears model, anchor and presentation without an announcement', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      orchestrator.handleClick(clickOn(item('1')));
+      orchestrator.handleClick(clickOn(item('3'), { metaKey: true }));
+      announceSpy.mockClear();
+
+      orchestrator.clearAfterMove();
+
+      expect(orchestrator.selectedIds()).toEqual([]);
+      expect(root.querySelectorAll(`[${batchSelectedAttribute}]`)).toHaveLength(0);
+      // silent: no "cleared" announcement
+      expect(announceSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('cleared'), expect.anything(),
+      );
+
+      // anchor gone: a following Shift-range starts fresh from the next
+      // click, selecting only the clicked card rather than extending.
+      orchestrator.handleClick(clickOn(item('2'), { shiftKey: true }));
+      expect(orchestrator.selectedIds()).toEqual(['2']);
+    });
+
+    it('is a no-op with nothing selected', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+
+      expect(() => orchestrator.clearAfterMove()).not.toThrow();
+    });
+  });
 });

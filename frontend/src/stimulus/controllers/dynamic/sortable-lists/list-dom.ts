@@ -182,17 +182,17 @@ function resolveAnchorRow(rowsContainer:HTMLElement, previousItemId:string):HTML
 }
 
 export function resolveListAppendPreviousItemId({
-  sourceItemId,
+  excludedItemIds,
   rowsContainer,
 }:{
-  sourceItemId:string;
+  excludedItemIds:ReadonlySet<string>;
   rowsContainer:Element;
 }):string|null {
   const rows = listRows(rowsContainer).reverse();
 
   for (const row of rows) {
     const itemId = resolvePreviousItemId(row, rowsContainer);
-    if (itemId && itemId !== sourceItemId) {
+    if (itemId && !excludedItemIds.has(itemId)) {
       return itemId;
     }
   }

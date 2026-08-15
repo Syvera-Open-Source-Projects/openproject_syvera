@@ -168,5 +168,46 @@ describe('sortable lists drag preview', () => {
       expect(container.classList.contains('Box--condensed')).toBe(false);
       expect(container.classList.contains('Box--spacious')).toBe(false);
     });
+
+    // The approved design: batches larger than one add a count badge to the
+    // preview, so a multi-card drag reads differently from a single card.
+    describe('batch count badge', () => {
+      const badgeSelector = '.op-sortable-lists-drag-preview-batch-badge';
+
+      it('adds no badge for a single-card drag (the default)', () => {
+        const target = withWidth(previewTarget(), 320);
+        const container = document.createElement('div');
+
+        renderDragPreview({ previewTarget: target, sourceElement: target, container });
+
+        expect(container.querySelector(badgeSelector)).toBeNull();
+      });
+
+      it('adds no badge when batchSize is explicitly 1', () => {
+        const target = withWidth(previewTarget(), 320);
+        const container = document.createElement('div');
+
+        renderDragPreview({
+          previewTarget: target, sourceElement: target, container, batchSize: 1,
+        });
+
+        expect(container.querySelector(badgeSelector)).toBeNull();
+      });
+
+      it('adds a badge with the batch count inside the container for a multi-card drag', () => {
+        const target = withWidth(previewTarget(), 320);
+        const container = document.createElement('div');
+
+        renderDragPreview({
+          previewTarget: target, sourceElement: target, container, batchSize: 3,
+        });
+
+        const badge = container.querySelector(badgeSelector);
+
+        expect(badge).not.toBeNull();
+        expect(badge?.textContent).toEqual('3');
+        expect(container.contains(badge)).toBe(true);
+      });
+    });
   });
 });

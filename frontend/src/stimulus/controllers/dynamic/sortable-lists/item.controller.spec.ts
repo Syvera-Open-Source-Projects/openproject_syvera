@@ -107,7 +107,8 @@ describe('Sortable lists item controller', () => {
       moveAvailability: vi.fn(() => null),
       ownerListElementOf: vi.fn(() => ownerListElement),
       ownerRowsContainer: vi.fn(ownerRowsContainer),
-      collapseSelectionForDrag: vi.fn(),
+      beginDragBatch: vi.fn(),
+      activeDragBatchCount: vi.fn(() => 0),
     };
   }
 
@@ -933,6 +934,65 @@ describe('Sortable lists item controller', () => {
       expect(preview.querySelector('[data-backlogs--work-package-target]')).toBeNull();
     });
 
+    it('renders no batch badge without a connected root', async () => {
+      const { article } = renderBacklogsRow();
+      const previewContainer = document.createElement('div');
+
+      vi.spyOn(article, 'getBoundingClientRect').mockReturnValue({
+        x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 64, width: 320, height: 64, toJSON: vi.fn(),
+      });
+
+      await ctx.nextFrame();
+
+      vi.mocked(draggable).mock.lastCall?.[0].onGenerateDragPreview?.({
+        ...dragEventPayload(article),
+        nativeSetDragImage: vi.fn(),
+      });
+
+      const previewOptions = vi.mocked(setCustomNativeDragPreview).mock.lastCall?.[0] as {
+        render:({ container }:{ container:HTMLElement }) => void;
+      };
+      previewOptions.render({ container: previewContainer });
+
+      expect(previewContainer.querySelector('.op-sortable-lists-drag-preview-batch-badge')).toBeNull();
+    });
+
+    it('adds a batch count badge to the preview matching the frozen batch size', async () => {
+      const { row, article } = renderBacklogsRow();
+      const previewContainer = document.createElement('div');
+
+      vi.spyOn(article, 'getBoundingClientRect').mockReturnValue({
+        x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 64, width: 320, height: 64, toJSON: vi.fn(),
+      });
+
+      await ctx.nextFrame();
+
+      const controller = ctx.getController<InstanceType<typeof ItemControllerType>>('sortable-lists--item', row);
+      controller.connectRoot({
+        element: row,
+        busy: false,
+        moveInDirection: vi.fn(),
+        moveAvailability: vi.fn(() => null),
+        ownerListElementOf: vi.fn(() => null),
+        ownerRowsContainer: vi.fn(() => null),
+        beginDragBatch: vi.fn(),
+        activeDragBatchCount: vi.fn(() => 3),
+      });
+
+      vi.mocked(draggable).mock.lastCall?.[0].onGenerateDragPreview?.({
+        ...dragEventPayload(article),
+        nativeSetDragImage: vi.fn(),
+      });
+
+      const previewOptions = vi.mocked(setCustomNativeDragPreview).mock.lastCall?.[0] as {
+        render:({ container }:{ container:HTMLElement }) => void;
+      };
+      previewOptions.render({ container: previewContainer });
+
+      const badge = previewContainer.querySelector('.op-sortable-lists-drag-preview-batch-badge');
+      expect(badge?.textContent).toEqual('3');
+    });
+
     it('offsets the preview so the pointer keeps its grab position on the card', async () => {
       const { article } = renderBacklogsRow();
 
@@ -1335,7 +1395,7 @@ describe('Sortable lists item controller', () => {
     it('collapses the batch onto the dragged item when a drag starts', async () => {
       const item = await renderItem({ mobility: 'free' });
       const controller = controllerFor(item);
-      const collapseSelectionForDrag = vi.fn();
+      const beginDragBatch = vi.fn();
       const root:SortableListsRoot = {
         element: item,
         busy: false,
@@ -1343,14 +1403,46 @@ describe('Sortable lists item controller', () => {
         moveAvailability: vi.fn(() => null),
         ownerListElementOf: vi.fn(() => null),
         ownerRowsContainer: vi.fn(() => null),
-        collapseSelectionForDrag,
+        beginDragBatch,
+        activeDragBatchCount: vi.fn(() => 0),
       };
 
       controller.connectRoot(root);
 
       vi.mocked(draggable).mock.lastCall?.[0].onDragStart?.(dragEventPayload(item));
 
-      expect(collapseSelectionForDrag).toHaveBeenCalledWith(item);
+      expect(beginDragBatch).toHaveBeenCalledWith(item);
+    });
+
+    // Pragmatic DnD invokes onGenerateDragPreview before onDragStart (native
+    // setDragImage must happen during the dragstart event), so the frozen
+    // batch has to exist by preview time: beginDragBatch is called at the top
+    // of onGenerateDragPreview too, ahead of rendering. Proven here on an
+    // item with no preview target, so if the call happened anywhere past the
+    // preview-target guard this would still catch it reaching the guard.
+    it('begins the drag batch at the top of onGenerateDragPreview, before the preview renders', async () => {
+      const item = await renderItem({ mobility: 'free' });
+      const controller = controllerFor(item);
+      const beginDragBatch = vi.fn();
+      const root:SortableListsRoot = {
+        element: item,
+        busy: false,
+        moveInDirection: vi.fn(),
+        moveAvailability: vi.fn(() => null),
+        ownerListElementOf: vi.fn(() => null),
+        ownerRowsContainer: vi.fn(() => null),
+        beginDragBatch,
+        activeDragBatchCount: vi.fn(() => 0),
+      };
+
+      controller.connectRoot(root);
+
+      vi.mocked(draggable).mock.lastCall?.[0].onGenerateDragPreview?.({
+        ...dragEventPayload(item),
+        nativeSetDragImage: vi.fn(),
+      });
+
+      expect(beginDragBatch).toHaveBeenCalledWith(item);
     });
   });
 });
