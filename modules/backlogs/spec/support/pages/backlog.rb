@@ -894,6 +894,30 @@ module Pages
       retry
     end
 
+    # Drags expecting the server to reject the move. drag_work_package derives
+    # its wait from list identity (a successful cross-list move reloads the
+    # frame), but a rejected move only streams an error flash and never
+    # reloads — so this settles on the stream render regardless of lists.
+    def drag_work_package_expecting_failure(moved, after:)
+      # See pick_up_and_release_work_package for the retry rationale.
+      retry_block(
+        args: {
+          tries: 3,
+          on: [
+            Capybara::Cuprite::ObsoleteNode,
+            Selenium::WebDriver::Error::StaleElementReferenceError
+          ]
+        }
+      ) do
+        moved_element = find(work_package_selector(moved))
+        target_element = find(work_package_selector(after))
+
+        wait_for_backlogs_turbo_stream(frame_reload: false) do
+          drag_backlogs_item(source: moved_element, target: target_element, edge: :bottom)
+        end
+      end
+    end
+
     # Drags a confined card over another sprint's list body and releases it
     # there. The release must resolve to nothing: no drop indicator over the
     # target, no row of it accepting, no move request. The card's unchanged
