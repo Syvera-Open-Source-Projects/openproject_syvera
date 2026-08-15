@@ -208,6 +208,44 @@ describe('sortable lists drag preview', () => {
         expect(badge?.textContent).toEqual('3');
         expect(container.contains(badge)).toBe(true);
       });
+
+      // Styling now lives entirely in sass, targeted through the Primer
+      // Counter contract plus this file's own class — no inline styles left
+      // to assert on.
+      it('carries the Primer Counter classes and the batch-badge class', () => {
+        const target = withWidth(previewTarget(), 320);
+        const container = document.createElement('div');
+
+        renderDragPreview({
+          previewTarget: target, sourceElement: target, container, batchSize: 3,
+        });
+
+        const badge = container.querySelector(badgeSelector);
+
+        expect(badge?.classList.contains('Counter')).toBe(true);
+        expect(badge?.classList.contains('Counter--primary')).toBe(true);
+        expect(badge?.classList.contains('op-sortable-lists-drag-preview-batch-badge')).toBe(true);
+      });
+
+      it('anchors the badge to the container without disturbing the already-appended preview clone', () => {
+        const target = withWidth(previewTarget(), 320);
+        const container = document.createElement('div');
+
+        renderDragPreview({
+          previewTarget: target, sourceElement: target, container, batchSize: 3,
+        });
+
+        const preview = container.querySelector('[data-preview]');
+        const badge = container.querySelector(badgeSelector);
+
+        // The preview clone survives lit-html's render() alongside the badge:
+        // both are present in the container at once.
+        expect(preview).not.toBeNull();
+        expect(badge).not.toBeNull();
+        expect(container.contains(preview)).toBe(true);
+        expect(container.contains(badge)).toBe(true);
+        expect(container.style.position).toEqual('relative');
+      });
     });
   });
 });

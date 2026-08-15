@@ -26,6 +26,8 @@
 // See COPYRIGHT and LICENSE files for more details.
 //++
 
+import { html, render } from 'lit-html';
+
 // Builds the custom native drag preview for a sortable item: a sanitised clone
 // of the item's preview target, sized to match and carrying the originating
 // Box's density so its card styling survives being mounted outside the Box.
@@ -54,11 +56,14 @@ const PREVIEW_STRIPPED_ATTRIBUTES = [
 // `.Box--condensed .Box-card`) would not apply to it otherwise.
 const BOX_DENSITY_VARIANT_CLASSES = ['Box--condensed', 'Box--spacious'] as const;
 
-// The count badge added to a multi-card drag's preview. Styled inline rather
-// than through a stylesheet class, matching this file's own approach for the
-// clone's width and margin above: the preview is a native drag image built
-// outside the page's normal render tree, so it must be legible even where no
-// stylesheet has had a chance to apply to it.
+// The count badge added to a multi-card drag's preview. Styled on Primer's
+// Counter contract (the same `Counter`/`Counter--primary` classes the
+// Angular PrimerCounterComponent renders) plus this class for the
+// positioning that Counter itself doesn't own; see
+// frontend/src/global_styles/content/drag_and_drop.sass. Building it as an
+// Angular custom element is not an option here: the native drag snapshot is
+// taken synchronously at dragstart, before an Angular element would have
+// painted, so this layer stays framework-agnostic by contract.
 const BATCH_BADGE_CLASS = 'op-sortable-lists-drag-preview-batch-badge';
 
 export function renderDragPreview({
@@ -103,36 +108,26 @@ export function renderDragPreview({
     // Anchors the badge's absolute positioning to the container itself
     // rather than whatever ancestor Pragmatic happens to mount it under.
     container.style.position = 'relative';
-    container.append(renderBatchBadge(preview.ownerDocument, batchSize));
+    renderBatchBadge(container, batchSize);
   }
 }
 
-// Absolutely positioned over the card clone's top-right corner. The
-// container is the preview mount Pragmatic hands render(); giving it
-// position:relative here (rather than assuming the caller already set it)
-// keeps the badge anchored to the card regardless of what else mounts there.
-function renderBatchBadge(document:Document, batchSize:number):HTMLElement {
-  const badge = document.createElement('span');
-  badge.className = BATCH_BADGE_CLASS;
-  badge.textContent = String(batchSize);
-  Object.assign(badge.style, {
-    position: 'absolute',
-    top: '-8px',
-    right: '-8px',
-    minWidth: '20px',
-    height: '20px',
-    padding: '0 6px',
-    borderRadius: '999px',
-    backgroundColor: 'var(--bgColor-emphasis, #1f2328)',
-    color: 'var(--fgColor-onEmphasis, #ffffff)',
-    fontSize: '12px',
-    fontWeight: '600',
-    lineHeight: '20px',
-    textAlign: 'center',
-    boxShadow: 'var(--shadow-floating-medium, 0 1px 3px rgba(0, 0, 0, 0.3))',
-  });
-
-  return badge;
+// Absolutely positioned over the card clone's top-right corner (see the sass
+// block in drag_and_drop.sass for the geometry, including the Firefox
+// inset). The container is the preview mount Pragmatic hands render();
+// giving it position:relative here (rather than assuming the caller already
+// set it) keeps the badge anchored to the card regardless of what else
+// mounts there.
+//
+// lit-html's render() is safe to call directly on `container` here even
+// though the sanitised preview clone was already appended to it above:
+// render() only inserts a marker comment before its own end node (the
+// container's end, when unset) and manages content from that marker
+// onward — it does not clear pre-existing children. The clone and the
+// badge coexist; see the "anchors the badge to the container without
+// disturbing the already-appended preview clone" spec.
+function renderBatchBadge(container:HTMLElement, batchSize:number):void {
+  render(html`<span class="Counter Counter--primary ${BATCH_BADGE_CLASS}">${batchSize}</span>`, container);
 }
 
 export function sanitizePreview(element:HTMLElement):void {

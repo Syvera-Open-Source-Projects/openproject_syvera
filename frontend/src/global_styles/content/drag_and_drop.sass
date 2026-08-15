@@ -45,3 +45,35 @@
 
   &:active
     cursor: grabbing
+
+// Multi-card batch count badge on a sortable-lists drag preview. Renders on
+// Primer's Counter contract (see PrimerCounterComponent) so its skin is
+// stylesheet-targetable rather than inline; this class only carries the
+// positioning Counter itself doesn't own.
+.op-sortable-lists-drag-preview-batch-badge
+  position: absolute
+  top: -8px
+  right: -8px
+  min-width: 20px
+  height: 20px
+  padding: 0 6px
+  border-radius: 999px
+  background-color: var(--bgColor-emphasis)
+  color: var(--fgColor-onEmphasis)
+  font-size: 12px
+  font-weight: 600
+  line-height: 20px
+  text-align: center
+  box-shadow: var(--shadow-floating-medium)
+
+  // Firefox folds a badge's box-shadow (and its overhang past the card's
+  // border box) into the native drag-image snapshot, shifting the snapshot
+  // origin off the border box so the grab offset no longer lines up under
+  // the pointer — the same failure mode as the .Box-card[data-preview] lift
+  // shadow in border_box_list_component.sass. Inset the badge fully inside
+  // the border box and drop the shadow on Firefox only; other browsers
+  // snapshot the border box and are unaffected.
+  .-browser-firefox &
+    top: 4px
+    right: 4px
+    box-shadow: none
