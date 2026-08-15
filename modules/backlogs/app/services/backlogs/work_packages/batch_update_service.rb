@@ -150,11 +150,11 @@ class Backlogs::WorkPackages::BatchUpdateService
     (work_packages + [anchor]).compact.uniq.sort_by(&:id)
   end
 
-  def with_ordered_locks(entries, &)
-    return yield if entries.empty?
+  def with_ordered_locks(entries, index = 0, &)
+    return yield if index >= entries.length
 
-    OpenProject::Mutex.with_advisory_lock_transaction(entries.first) do
-      with_ordered_locks(entries.drop(1), &)
+    OpenProject::Mutex.with_advisory_lock_transaction(entries[index]) do
+      with_ordered_locks(entries, index + 1, &)
     end
   end
 
