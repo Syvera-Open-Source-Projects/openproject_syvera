@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #-- copyright
 # OpenProject is an open source project management software.
 # Copyright (C) the OpenProject GmbH
@@ -26,25 +28,15 @@
 # See COPYRIGHT and LICENSE files for more details.
 #++
 
----
-en:
-  js:
-    backlogs:
-      selection:
-        card_state: "Selected"
-        cleared: "Selection cleared."
-        not_selectable: "Selection unchanged. This work package takes no part in this list's ordering."
-        range_blocked: "Selection unchanged. That range contains a work package that takes no part in this list's ordering."
-        range_restarted:
-          one: "Could not extend the range. 1 work package selected."
-          other: "Could not extend the range. %{count} work packages selected."
-        range_unavailable: "Selection unchanged. Expand this list to select that range."
-        selected:
-          one: "1 work package selected."
-          other: "%{count} work packages selected."
-    burndown:
-      day: "Day"
-      points: "Points"
-    work_packages:
-      properties:
-        storyPoints: "Story Points"
+module Backlogs
+  # The single description that every selected card points at through
+  # `aria-describedby`, so batch membership reaches assistive technology per
+  # card without duplicating the string onto every one of them.
+  #
+  # It carries no server-rendered state: selection is client state and would be
+  # stale the moment the next card is selected. The element is permanently
+  # hidden, which is also why it costs the planning columns no layout space.
+  class SelectionDescriptionComponent < ApplicationComponent
+    DESCRIPTION_ID = "op-backlogs-batch-selected-description"
+  end
+end
