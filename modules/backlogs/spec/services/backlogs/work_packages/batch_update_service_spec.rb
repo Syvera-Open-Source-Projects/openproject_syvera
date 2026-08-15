@@ -273,6 +273,48 @@ RSpec.describe Backlogs::WorkPackages::BatchUpdateService, type: :model do
     end
   end
 
+  describe "target availability" do
+    it "rejects a same-list reorder inside a sprint that completed after load" do
+      sprint.update!(status: "completed")
+
+      result = service([sprint_wp1])
+        .call(list_type: "sprint", list_id: sprint.id.to_s, prev_id: sprint_wp3.id.to_s)
+
+      expect(result).to be_failure
+      expect(result.message)
+        .to eq I18n.t("backlogs.work_packages.batch_update_service.unavailable_target")
+      expect(sprint_order).to eq [sprint_wp1.id, sprint_wp2.id, sprint_wp3.id]
+      expect(sprint.work_packages_for(project).pluck(:position)).to eq [1, 2, 3]
+    end
+
+    it "rejects a cross-list move into a sprint that completed after load" do
+      sprint.update!(status: "completed")
+
+      result = service([bucket_wp1])
+        .call(list_type: "sprint", list_id: sprint.id.to_s, prev_id: sprint_wp1.id.to_s)
+
+      expect(result).to be_failure
+      expect(result.message)
+        .to eq I18n.t("backlogs.work_packages.batch_update_service.unavailable_target")
+      expect(bucket_wp1.reload.backlog_bucket_id).to eq bucket.id
+      expect(bucket_wp1.position).to eq 1
+      expect(sprint_order).to eq [sprint_wp1.id, sprint_wp2.id, sprint_wp3.id]
+    end
+
+    it "rejects a backlog bucket target from another project" do
+      other_project = create(:project, types: [type])
+      foreign_bucket = create(:backlog_bucket, project: other_project)
+
+      result = service([sprint_wp1])
+        .call(list_type: "backlog_bucket", list_id: foreign_bucket.id.to_s)
+
+      expect(result).to be_failure
+      expect(result.message)
+        .to eq I18n.t("backlogs.work_packages.batch_update_service.unavailable_target")
+      expect(sprint_order).to eq [sprint_wp1.id, sprint_wp2.id, sprint_wp3.id]
+    end
+  end
+
   describe "stale predecessor" do
     it "rejects a predecessor that is not in the target list" do
       result = service([sprint_wp2])

@@ -195,6 +195,20 @@ RSpec.describe "Backlogs collection move", :skip_csrf, type: :rails_request do
       expect(sprint.work_packages_for(project).pluck(:id))
         .to eq [sprint_wp1.id, sprint_wp2.id, sprint_wp3.id]
     end
+
+    it "streams an error flash and a 422 for a same-list reorder into a completed sprint" do
+      sprint.update!(status: "completed")
+
+      move_collection(ids: [sprint_wp2.id], list_type: "sprint", list_id: sprint.id,
+                      prev_id: sprint_wp3.id, optimistic: true)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include(
+        ERB::Util.html_escape(I18n.t("backlogs.work_packages.batch_update_service.unavailable_target"))
+      )
+      expect(sprint.work_packages_for(project).pluck(:id))
+        .to eq [sprint_wp1.id, sprint_wp2.id, sprint_wp3.id]
+    end
   end
 
   describe "invisibility after move" do

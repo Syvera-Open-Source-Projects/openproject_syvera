@@ -74,6 +74,7 @@ class Backlogs::WorkPackages::BatchUpdateService
     # from a work_packages.first that a concurrent move could have already
     # relocated.
     @batch_project_id = work_packages.first.project_id
+    @batch_project = work_packages.first.project
 
     placement = resolve_placement(target, prev_id)
     return placement if placement.is_a?(ServiceResult)
@@ -83,6 +84,7 @@ class Backlogs::WorkPackages::BatchUpdateService
     WorkPackage.transaction do
       with_ordered_locks(lock_entries(placement.anchor)) do
         revalidate_cohort!
+        revalidate_target_availability!(target)
         revalidate_anchor!(placement, target)
         current_prev_id = placement.initial_prev_id
 
@@ -214,6 +216,31 @@ class Backlogs::WorkPackages::BatchUpdateService
     raise BatchFailure, stale_predecessor_failure
   end
 
+  # The contract (base_contract_patch.rb) only revalidates a sprint or
+  # bucket target when the corresponding column actually changes on a given
+  # work package, so a same-list reorder never triggers it: nothing about
+  # sprint_id or backlog_bucket_id changes for a member that is already in
+  # the target list. A sprint that completed (or a bucket that was deleted
+  # or reassigned) after the page loaded would otherwise stay a silently
+  # accepted destination for exactly that case. Checked here, under lock,
+  # against every placement mode alike — mirroring the contract's own
+  # assignable_sprints/backlog_bucket_belongs_to_project checks so a batch
+  # move and a single-work-package save reject the same unavailable targets.
+  def revalidate_target_availability!(target)
+    raise BatchFailure, unavailable_target_failure unless target_available?(target)
+  end
+
+  def target_available?(target)
+    case target
+    in Backlogs::Target::SprintId
+      Sprint.assignable(project: batch_project, user:).exists?(id: target.list_id)
+    in Backlogs::Target::BucketId
+      BacklogBucket.for_project(batch_project).exists?(id: target.list_id)
+    in Backlogs::Target::InboxId
+      true
+    end
+  end
+
   def last_non_batch_member(target)
     WorkPackage
       .where(project_id: batch_project_id, **target.attributes)
@@ -226,6 +253,10 @@ class Backlogs::WorkPackages::BatchUpdateService
     @batch_project_id
   end
 
+  def batch_project
+    @batch_project
+  end
+
   def invalid_target_failure
     ServiceResult.failure(message: I18n.t("backlogs.work_packages.update_service.invalid_target_type"))
   end
@@ -236,5 +267,9 @@ class Backlogs::WorkPackages::BatchUpdateService
 
   def stale_batch_failure
     ServiceResult.failure(message: I18n.t("backlogs.work_packages.batch_update_service.stale_batch"))
+  end
+
+  def unavailable_target_failure
+    ServiceResult.failure(message: I18n.t("backlogs.work_packages.batch_update_service.unavailable_target"))
   end
 end
