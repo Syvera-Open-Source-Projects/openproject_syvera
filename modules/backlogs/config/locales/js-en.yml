@@ -30,6 +30,10 @@
 en:
   js:
     backlogs:
+      action_menu:
+        selected_work_packages:
+          one: "1 selected work package"
+          other: "%{count} selected work packages"
       announcements:
         fallback_item_label: "Work package"
         fallback_list_name: "another list"

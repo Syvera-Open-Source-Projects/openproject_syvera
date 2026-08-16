@@ -169,23 +169,96 @@ RSpec.describe Backlogs::WorkPackageCardMenuComponent, type: :component do
       end
     end
 
-    it "shows a divider before the Move submenu" do
-      render_component
-
-      expect(page).to have_css(".ActionList-sectionDivider")
-    end
-
-    it "wires the divider up to the item controller, so it can be hidden with the group" do
-      render_component
-
-      expect(page).to have_css(".ActionList-sectionDivider[data-sortable-lists--item-target='moveDivider']")
-    end
-
     it "shows the Move to position submenu with incoming-arrow icon" do
       render_component
 
       expect(page).to have_selector(:menuitem, text: "Move to position")
       expect(page).to have_octicon(:"op-arrow-in")
+    end
+  end
+
+  describe "action menu groups" do
+    before do
+      bucket = create(:backlog_bucket, project:)
+      render_component(bucket_ids: [bucket.id])
+    end
+
+    def action_group(target)
+      page.find("ul[role='group'][data-sortable-lists--item-target='#{target}']")
+    end
+
+    def hidden_action_heading(target)
+      page.find("[data-sortable-lists--item-target='#{target}'][hidden]", visible: :all)
+    end
+
+    it "renders two stable groups with initially hidden accessible headings", :aggregate_failures do
+      this_work_package_group = action_group("thisWorkPackageGroup")
+      selected_work_packages_group = action_group("selectedWorkPackagesGroup")
+      this_work_package_heading = hidden_action_heading("thisWorkPackageHeading")
+      selected_work_packages_heading = hidden_action_heading("selectedWorkPackagesHeading")
+
+      expect(page).to have_css("ul[role='group']", count: 2)
+      expect(this_work_package_heading).to have_text("This work package")
+      expect(selected_work_packages_heading).to have_text("0 selected work packages")
+      expect(this_work_package_group["aria-labelledby"]).to eq(
+        this_work_package_heading.find(".ActionList-sectionDivider-title", visible: :all)[:id]
+      )
+      expect(selected_work_packages_group["aria-labelledby"]).to eq(
+        selected_work_packages_heading.find(".ActionList-sectionDivider-title", visible: :all)[:id]
+      )
+    end
+
+    it "renders singular actions only in the first group", :aggregate_failures do
+      %i[open_details open_fullscreen copy_url_to_clipboard copy_work_package_id].each do |action|
+        expect(action_group("thisWorkPackageGroup")).to have_css("#work_package_#{work_package.id}_menu_#{action}")
+        expect(action_group("selectedWorkPackagesGroup")).to have_no_css("#work_package_#{work_package.id}_menu_#{action}")
+      end
+    end
+
+    it "renders destination and position actions only in the second group", :aggregate_failures do
+      %i[move_to_inbox move_to_backlog_bucket move_to_sprint].each do |action|
+        expect(action_group("selectedWorkPackagesGroup")).to have_css("#work_package_#{work_package.id}_menu_#{action}")
+        expect(action_group("thisWorkPackageGroup")).to have_no_css("#work_package_#{work_package.id}_menu_#{action}")
+      end
+      expect(action_group("selectedWorkPackagesGroup")).to have_css(
+        "li[data-sortable-lists--item-target='moveMenu']",
+        text: "Move to position"
+      )
+      expect(action_group("thisWorkPackageGroup")).to have_no_css("li[data-sortable-lists--item-target='moveMenu']")
+      expect(page).to have_no_css("[data-sortable-lists--item-target='moveDivider']")
+    end
+
+    it "preserves the ActionMenu roving-focus contract inside both groups", :aggregate_failures do
+      actions = %i[
+        open_details open_fullscreen copy_url_to_clipboard copy_work_package_id
+        move_to_inbox move_to_backlog_bucket move_to_sprint
+      ]
+
+      actions.each do |action|
+        expect(page.find("#work_package_#{work_package.id}_menu_#{action}")[:tabindex]).to eq("-1")
+      end
+      expect(action_group("selectedWorkPackagesGroup")).to have_css(
+        "li[data-sortable-lists--item-target='moveMenu'] > button[role='menuitem'][tabindex='-1']"
+      )
+    end
+
+    it "renders only the singular group for a fixed work package", :aggregate_failures do
+      fixed_user = create(:user)
+      render_inline(described_class.new(
+                      work_package:,
+                      project:,
+                      sprint_ids: [sprint.id],
+                      bucket_ids: [],
+                      current_user: fixed_user
+                    ))
+
+      singular_group = page.find("ul[role='group'][data-sortable-lists--item-target='thisWorkPackageGroup']")
+
+      expect(page).to have_css("ul[role='group']", count: 1)
+      expect(singular_group).to have_css("#work_package_#{work_package.id}_menu_open_details")
+      expect(page).to have_no_css("[data-sortable-lists--item-target='selectedWorkPackagesGroup']")
+      expect(page).to have_no_css("[data-sortable-lists--item-target='selectedWorkPackagesHeading']")
+      expect(page).to have_no_css("[data-sortable-lists--item-target='moveMenu']")
     end
   end
 
@@ -470,12 +543,6 @@ RSpec.describe Backlogs::WorkPackageCardMenuComponent, type: :component do
         expect(page).to have_text(I18n.t(:label_sort_higher))
         expect(page).to have_text(I18n.t(:label_sort_lower))
         expect(page).to have_text(I18n.t(:label_sort_lowest))
-      end
-
-      it "keeps the divider that separates the move group" do
-        render_component
-
-        expect(page).to have_css(".ActionList-sectionDivider")
       end
 
       it "still offers the actions that do not write to it", :aggregate_failures do

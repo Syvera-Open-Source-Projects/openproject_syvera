@@ -1161,6 +1161,23 @@ describe('Sortable lists item controller', () => {
   describe('move menu', () => {
     let menuCtx:StimulusTestContext|undefined;
 
+    beforeEach(() => {
+      window.I18n.store({
+        en: {
+          js: {
+            backlogs: {
+              action_menu: {
+                selected_work_packages: {
+                  one: '1 selected work package',
+                  other: '%{count} selected work packages',
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
     afterEach(() => {
       menuCtx?.dispose();
       menuCtx = undefined;
@@ -1182,7 +1199,8 @@ describe('Sortable lists item controller', () => {
     }
 
     // Builds an item element containing a fake <action-menu> whose four move
-    // items are <li> targets (direction + move action on the li). The menu
+    // items are <li> targets (direction + move action on the li). Optional
+    // action groups mirror the stable deferred Primer structure. The menu
     // stub exposes the Primer item-state API the controller calls;
     // isItemDisabled is driven by a live class check so the click-guard test
     // is realistic.
@@ -1195,23 +1213,36 @@ describe('Sortable lists item controller', () => {
       isItemHidden:ReturnType<typeof vi.fn>;
     }
 
-    function renderItemWithMenu(idNumber:number, withDivider = false):{ el:HTMLElement; menu:FakeActionMenu } {
+    function renderItemWithMenu(
+      idNumber:number,
+      actionGroups:false|true|'singular' = false,
+    ):{ el:HTMLElement; menu:FakeActionMenu } {
       const el = document.createElement('div');
       el.dataset.controller = 'sortable-lists--item';
       el.setAttribute('data-sortable-lists--item-id-value', String(idNumber));
       el.setAttribute('data-sortable-lists--item-type-value', 'work_package');
 
       const menuElement = document.createElement('action-menu');
-      // The divider opens the move group, so everything below it is what
-      // decides whether it still separates anything.
-      menuElement.innerHTML = withDivider ? '<li data-sortable-lists--item-target="moveDivider"></li>' : '';
+      if (actionGroups) {
+        menuElement.innerHTML = [
+          '<div hidden data-sortable-lists--item-target="thisWorkPackageHeading">This work package</div>',
+          '<ul data-sortable-lists--item-target="thisWorkPackageGroup"><li>Open details</li></ul>',
+          ...(actionGroups === true ? [
+            '<div hidden data-sortable-lists--item-target="selectedWorkPackagesHeading">0 selected work packages</div>',
+            '<ul data-sortable-lists--item-target="selectedWorkPackagesGroup"></ul>',
+          ] : []),
+        ].join('');
+      }
       const parent = document.createElement('li');
       parent.setAttribute('data-sortable-lists--item-target', 'moveMenu');
       parent.innerHTML = ['top', 'up', 'down', 'bottom'].map((direction) => (
         `<li data-sortable-lists--item-target="moveItem" data-sortable-lists--item-direction-param="${direction}"`
         + ' data-action="click->sortable-lists--item#move"><button></button></li>'
       )).join('');
-      menuElement.appendChild(parent);
+      if (actionGroups !== 'singular') {
+        const selectedGroup = menuElement.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]');
+        (selectedGroup ?? menuElement).appendChild(parent);
+      }
       el.appendChild(menuElement);
 
       const menu:FakeActionMenu = {
@@ -1234,7 +1265,9 @@ describe('Sortable lists item controller', () => {
       const item = document.createElement('li');
       item.setAttribute('data-sortable-lists--item-target', 'destinationItem');
       item.dataset.sortableListsDestinations = metadata;
-      el.querySelector('action-menu')!.append(item);
+      const destinationParent = el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]')
+        ?? el.querySelector('action-menu')!;
+      destinationParent.prepend(item);
       return item;
     };
     const destinationFor = (el:HTMLElement, candidates:{ type:string; id:string|null }[]) => (
@@ -1273,6 +1306,10 @@ describe('Sortable lists item controller', () => {
 
       return { root, actionScopeFor, availableDestinations };
     }
+
+    const actionTarget = (el:HTMLElement, name:string) => (
+      el.querySelector<HTMLElement>(`[data-sortable-lists--item-target="${name}"]`)!
+    );
 
     async function mountActionMenuInvocationFixture() {
       const { el } = renderItemWithMenu(1);
@@ -1492,6 +1529,64 @@ describe('Sortable lists item controller', () => {
       expect(menu.hideItem).toHaveBeenCalledWith(parent);
     });
 
+    it('keeps headings hidden for a one-card scope while its valid actions stay visible', async () => {
+      const { el } = renderItemWithMenu(1, true);
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1'] };
+      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      actionScopeFor.mockReturnValue(scope);
+      availableDestinations.mockImplementation((_scope, candidates) => candidates);
+      controller.connectRoot(root);
+
+      const destination = destinationFor(el, [{ type: 'sprint', id: '1' }]);
+      await menuCtx!.nextFrame();
+
+      expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+      expect(destination).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'moveMenu')).not.toHaveAttribute('hidden');
+    });
+
+    it('reveals both headings with the selected count for a true batch', async () => {
+      const { el } = renderItemWithMenu(1, true);
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1', '2', '3'] };
+      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      actionScopeFor.mockReturnValue(scope);
+      availableDestinations.mockImplementation((_scope, candidates) => candidates);
+      controller.connectRoot(root);
+
+      destinationFor(el, [{ type: 'sprint', id: '1' }]);
+      await menuCtx!.nextFrame();
+
+      expect(actionTarget(el, 'thisWorkPackageHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveTextContent('3 selected work packages');
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+    });
+
+    it('keeps the selected-work-packages group visible with only a destination action', async () => {
+      const { el } = renderItemWithMenu(1, true);
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1', '2'] };
+      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      actionScopeFor.mockReturnValue(scope);
+      availableDestinations.mockImplementation((_scope, candidates) => candidates);
+      root.moveAvailability = () => ({ top: false, up: false, down: false, bottom: false });
+      controller.connectRoot(root);
+
+      const destination = destinationFor(el, [{ type: 'sprint', id: '1' }]);
+      await menuCtx!.nextFrame();
+
+      expect(destination).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'moveMenu')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+    });
+
     it('projects deferred destination items for the selected invoker', async () => {
       const { el, menu } = renderItemWithMenu(1, true);
       document.body.appendChild(el);
@@ -1511,6 +1606,32 @@ describe('Sortable lists item controller', () => {
       expect(actionScopeFor).toHaveBeenCalledWith(el);
       expect(menu.hideItem).toHaveBeenCalledWith(moveToSprint);
       expect(menu.showItem).toHaveBeenCalledWith(moveToInbox);
+    });
+
+    it('projects headings and group visibility when deferred targets connect after the root', async () => {
+      const { el } = renderItemWithMenu(1);
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1', '2', '3'] };
+      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      actionScopeFor.mockReturnValue(scope);
+      availableDestinations.mockImplementation((_scope, candidates) => candidates);
+      controller.connectRoot(root);
+
+      const actionMenu = el.querySelector('action-menu')!;
+      actionMenu.insertAdjacentHTML('afterbegin', [
+        '<div hidden data-sortable-lists--item-target="thisWorkPackageHeading">This work package</div>',
+        '<ul data-sortable-lists--item-target="thisWorkPackageGroup"><li>Open details</li></ul>',
+        '<div hidden data-sortable-lists--item-target="selectedWorkPackagesHeading">0 selected work packages</div>',
+        '<ul data-sortable-lists--item-target="selectedWorkPackagesGroup"></ul>',
+      ].join(''));
+      destinationFor(el, [{ type: 'inbox', id: null }]);
+      await menuCtx!.nextFrame();
+
+      expect(actionTarget(el, 'thisWorkPackageHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveTextContent('3 selected work packages');
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
     });
 
     it('recomputes selected multi-card and prospective one-card scopes whenever the menu opens', async () => {
@@ -1569,7 +1690,6 @@ describe('Sortable lists item controller', () => {
       await menuCtx!.nextFrame();
 
       const moveMenu = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveMenu"]')!;
-      const divider = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveDivider"]')!;
       expect(menu.hideItem).toHaveBeenCalledWith(moveToSprint);
       expect(menu.hideItem).toHaveBeenCalledWith(moveToInbox);
       expect(menu.showItem).toHaveBeenCalledWith(moveMenu);
@@ -1577,7 +1697,7 @@ describe('Sortable lists item controller', () => {
       expect(menu.showItem).toHaveBeenCalledWith(liFor(el, 'up'));
       expect(menu.showItem).toHaveBeenCalledWith(liFor(el, 'down'));
       expect(menu.hideItem).toHaveBeenCalledWith(liFor(el, 'bottom'));
-      expect(divider.hasAttribute('hidden')).toBe(false);
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
     });
 
     it('hides an all-unavailable batch position submenu and its directions', async () => {
@@ -1595,13 +1715,12 @@ describe('Sortable lists item controller', () => {
       await menuCtx!.nextFrame();
 
       const moveMenu = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveMenu"]')!;
-      const divider = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveDivider"]')!;
       expect(menu.hideItem).toHaveBeenCalledWith(moveToSprint);
       expect(menu.hideItem).toHaveBeenCalledWith(moveMenu);
       for (const direction of ['top', 'up', 'down', 'bottom']) {
         expect(menu.hideItem).toHaveBeenCalledWith(liFor(el, direction));
       }
-      expect(divider.hasAttribute('hidden')).toBe(true);
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).toHaveAttribute('hidden');
     });
 
     it('keeps only the current owner destination for a confined batch scope', async () => {
@@ -1622,22 +1741,21 @@ describe('Sortable lists item controller', () => {
       expect(menu.showItem).toHaveBeenCalledWith(moveToSprint);
     });
 
-    it('hides batch destinations for a fixed synthetic singular scope', async () => {
-      const { el, menu } = renderItemWithMenu(1);
+    it('handles a fixed singular item with no batch action group', async () => {
+      const { el } = renderItemWithMenu(1, 'singular');
       el.setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
       document.body.appendChild(el);
       const controller = await mountItemController(el);
-      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      const { root, actionScopeFor } = stubMenuRoot(el, { isFirst: false, isLast: false });
       const scope:ActionScope = { kind: 'singular', invoker: el, items: [], ids: [] };
       actionScopeFor.mockReturnValue(scope);
-      availableDestinations.mockReturnValue([]);
       controller.connectRoot(root);
 
-      const moveToSprint = destinationFor(el, [{ type: 'sprint', id: '12' }]);
-      await menuCtx!.nextFrame();
+      expect(() => controller.moveItemTargetConnected()).not.toThrow();
 
-      expect(availableDestinations).toHaveBeenCalledWith(scope, [{ type: 'sprint', id: '12' }]);
-      expect(menu.hideItem).toHaveBeenCalledWith(moveToSprint);
+      expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
+      expect(el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]')).toBeNull();
+      expect(el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesHeading"]')).toBeNull();
     });
 
     it.each([
@@ -1656,46 +1774,6 @@ describe('Sortable lists item controller', () => {
 
       expect(menu.hideItem).toHaveBeenCalledWith(destination);
       expect(availableDestinations).not.toHaveBeenCalled();
-    });
-
-    // Regression: the divider is rendered server-side from a permission check
-    // alone, so an item with nowhere to move used to be left with a separator
-    // and nothing below it.
-    it('hides the divider when nothing below it is left visible', async () => {
-      const { el } = renderItemWithMenu(1, true);
-      document.body.appendChild(el);
-      const controller = await mountItemController(el);
-      controller.connectRoot(stubRoot(el, { isFirst: true, isLast: true }));
-      controller.moveItemTargetConnected();
-
-      const divider = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveDivider"]')!;
-      expect(divider.hasAttribute('hidden')).toBe(true);
-    });
-
-    it('keeps the divider while something below it is still visible', async () => {
-      const { el } = renderItemWithMenu(1, true);
-      document.body.appendChild(el);
-      const controller = await mountItemController(el);
-      controller.connectRoot(stubRoot(el, { isFirst: true, isLast: false }));
-      controller.moveItemTargetConnected();
-
-      const divider = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveDivider"]')!;
-      expect(divider.hasAttribute('hidden')).toBe(false);
-    });
-
-    // A divider has no `.ActionListContent`, so routing it through
-    // `disableItem` would throw — and in this mode the group stays visible
-    // anyway, only disabled.
-    it('leaves the divider alone when hideUnavailable is off', async () => {
-      const { el } = renderItemWithMenu(1, true);
-      el.setAttribute('data-sortable-lists--item-hide-unavailable-value', 'false');
-      document.body.appendChild(el);
-      const controller = await mountItemController(el);
-      controller.connectRoot(stubRoot(el, { isFirst: true, isLast: true }));
-      controller.moveItemTargetConnected();
-
-      const divider = el.querySelector<HTMLElement>('li[data-sortable-lists--item-target="moveDivider"]')!;
-      expect(divider.hasAttribute('hidden')).toBe(false);
     });
 
     it('delegates an enabled click to the root and no-ops a disabled one', async () => {

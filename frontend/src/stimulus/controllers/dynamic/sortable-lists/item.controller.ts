@@ -72,7 +72,19 @@ function isDestinationIdentity(candidate:unknown):candidate is DestinationIdenti
 }
 
 export default class ItemController extends Controller<HTMLElement> implements RootAwareChild {
-  static targets = ['handle', 'preview', 'destinationItem', 'moveItem', 'moveMenu', 'moveDivider', 'focus'];
+  static targets = [
+    'handle',
+    'preview',
+    'destinationItem',
+    'moveItem',
+    'moveMenu',
+    'thisWorkPackageGroup',
+    'thisWorkPackageHeading',
+    'selectedWorkPackagesGroup',
+    'selectedWorkPackagesHeading',
+    'focus',
+  ];
+
   static elements = { menu: 'action-menu' };
 
   static values = {
@@ -108,8 +120,14 @@ export default class ItemController extends Controller<HTMLElement> implements R
   declare readonly moveItemTargets:HTMLElement[];
   declare readonly moveMenuTarget:HTMLElement;
   declare readonly hasMoveMenuTarget:boolean;
-  declare readonly moveDividerTarget:HTMLElement;
-  declare readonly hasMoveDividerTarget:boolean;
+  declare readonly thisWorkPackageGroupTarget:HTMLElement;
+  declare readonly hasThisWorkPackageGroupTarget:boolean;
+  declare readonly thisWorkPackageHeadingTarget:HTMLElement;
+  declare readonly hasThisWorkPackageHeadingTarget:boolean;
+  declare readonly selectedWorkPackagesGroupTarget:HTMLElement;
+  declare readonly hasSelectedWorkPackagesGroupTarget:boolean;
+  declare readonly selectedWorkPackagesHeadingTarget:HTMLElement;
+  declare readonly hasSelectedWorkPackagesHeadingTarget:boolean;
   declare readonly focusTarget:HTMLElement;
   declare readonly hasFocusTarget:boolean;
 
@@ -184,6 +202,22 @@ export default class ItemController extends Controller<HTMLElement> implements R
   }
 
   destinationItemTargetConnected():void {
+    this.refreshActionAvailability();
+  }
+
+  thisWorkPackageGroupTargetConnected():void {
+    this.refreshActionAvailability();
+  }
+
+  thisWorkPackageHeadingTargetConnected():void {
+    this.refreshActionAvailability();
+  }
+
+  selectedWorkPackagesGroupTargetConnected():void {
+    this.refreshActionAvailability();
+  }
+
+  selectedWorkPackagesHeadingTargetConnected():void {
     this.refreshActionAvailability();
   }
 
@@ -559,16 +593,24 @@ export default class ItemController extends Controller<HTMLElement> implements R
     }
 
     const scope = preparedScope ?? root.actionScopeFor(this.element);
-    this.refreshDestinationAvailability(root, scope);
-    this.refreshMoveMenuAvailability(root);
-    this.refreshMoveDivider();
+    const visibleDestinationCount = this.refreshDestinationAvailability(root, scope);
+    const visibleMoveMenuCount = this.refreshMoveMenuAvailability(root);
+
+    this.refreshActionGroups(scope, visibleDestinationCount + visibleMoveMenuCount);
   }
 
-  private refreshDestinationAvailability(root:SortableListsRoot, scope:ActionScope):void {
+  private refreshDestinationAvailability(root:SortableListsRoot, scope:ActionScope):number {
+    let visible = 0;
+
     for (const item of this.destinationItemTargets) {
       const candidates = this.destinationCandidates(item);
       this.setAvailability(item, candidates.length > 0 && root.availableDestinations(scope, candidates).length > 0);
+      if (!item.hasAttribute('hidden')) {
+        visible += 1;
+      }
     }
+
+    return visible;
   }
 
   private destinationCandidates(item:HTMLElement):DestinationIdentity[] {
@@ -585,12 +627,12 @@ export default class ItemController extends Controller<HTMLElement> implements R
     }
   }
 
-  private refreshMoveMenuAvailability(root:SortableListsRoot):void {
+  private refreshMoveMenuAvailability(root:SortableListsRoot):number {
     // Null availability means the item is not in a list yet; leave the menu
     // alone until the outlet wiring settles.
     const availability = root.moveAvailability(this.element);
     if (!availability) {
-      return;
+      return this.hasMoveMenuTarget && !this.moveMenuTarget.hasAttribute('hidden') ? 1 : 0;
     }
 
     let available = 0;
@@ -607,33 +649,35 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
     if (this.hasMoveMenuTarget) {
       this.setAvailability(this.moveMenuTarget, available > 0);
+      return this.moveMenuTarget.hasAttribute('hidden') ? 0 : 1;
     }
+
+    return 0;
   }
 
-  // The divider that opens the move group is rendered server-side from a
-  // permission check alone, so hiding the last entry below it would otherwise
-  // leave a separator with nothing to separate. It never goes through
-  // setAvailability: `disableItem` writes to the item's `.ActionListContent`,
-  // which a divider does not have — and in that mode the group stays visible
-  // anyway, only disabled.
-  private refreshMoveDivider():void {
-    if (!this.hasMoveDividerTarget || !this.hideUnavailableValue) {
-      return;
+  private refreshActionGroups(scope:ActionScope, visibleBatchActionCount:number):void {
+    const trueBatch = scope.kind === 'batch' && scope.ids.length > 1;
+
+    if (this.hasThisWorkPackageHeadingTarget) {
+      this.thisWorkPackageHeadingTarget.toggleAttribute('hidden', !trueBatch);
     }
 
-    const divider = this.moveDividerTarget;
-    let sibling = divider.nextElementSibling;
-
-    while (sibling) {
-      if (!sibling.hasAttribute('hidden')) {
-        divider.removeAttribute('hidden');
-        return;
+    if (this.hasSelectedWorkPackagesHeadingTarget) {
+      this.selectedWorkPackagesHeadingTarget.toggleAttribute('hidden', !trueBatch);
+      if (trueBatch) {
+        this.selectedWorkPackagesHeadingTarget.textContent = I18n.t(
+          'js.backlogs.action_menu.selected_work_packages',
+          { count: scope.ids.length },
+        );
       }
-
-      sibling = sibling.nextElementSibling;
     }
 
-    divider.setAttribute('hidden', 'hidden');
+    if (this.hasSelectedWorkPackagesGroupTarget) {
+      this.selectedWorkPackagesGroupTarget.toggleAttribute(
+        'hidden',
+        trueBatch && visibleBatchActionCount === 0,
+      );
+    }
   }
 
   // Availability goes through the action-menu element's API: disableItem sets the
