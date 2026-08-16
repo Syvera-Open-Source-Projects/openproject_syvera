@@ -57,6 +57,7 @@ import {
   resolveItemLabel,
   resolveItemPosition,
   resolveItemType,
+  resolveMoveAvailability,
   restoreRowPositions,
   rowOf,
   rowsRemainAt,
@@ -414,23 +415,28 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   // Availability mirrors executability: a direction is offered exactly when the
   // move resolver can produce a target for it. This keeps the menu honest about
   // truncated lists, where a one-step move across the hidden block is not
-  // addressable. Null means the item is not in an owned list (yet). The result
-  // is a snapshot for menu gating; the click path re-resolves the live DOM.
+  // addressable. Null means the item is not in an owned list yet or is not
+  // orderable. The result is a snapshot for menu gating; the click path
+  // re-resolves the live DOM.
   moveAvailability(itemElement:HTMLElement):MoveAvailability|null {
+    const list = this.ownerListOf(itemElement);
+    if (!list || !isOrderableItem(itemElement)) {
+      return null;
+    }
+
     const scope = this.actionScopeFor(itemElement);
     if (scope.kind === 'singular') {
-      return null;
+      return resolveMoveAvailability({
+        itemElement,
+        rowsContainer: list.rowsContainer,
+      });
     }
 
     if (!this.resolveCollectionMoveUrl()) {
       return { top: false, up: false, down: false, bottom: false };
     }
 
-    const list = this.ownerListOf(itemElement);
-
-    return list
-      ? resolveBlockMoveAvailability({ itemElements: scope.items, rowsContainer: list.rowsContainer })
-      : null;
+    return resolveBlockMoveAvailability({ itemElements: scope.items, rowsContainer: list.rowsContainer });
   }
 
   moveToDestination(itemElement:HTMLElement, target:DestinationIdentity):void {

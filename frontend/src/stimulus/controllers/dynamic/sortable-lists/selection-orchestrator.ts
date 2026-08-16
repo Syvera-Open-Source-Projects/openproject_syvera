@@ -103,13 +103,6 @@ export class SelectionOrchestrator {
     return this.resolveActionScope(itemElement, true);
   }
 
-  // A singular move can collapse a wider batch the same way dragging an
-  // unselected card does. Batch menu moves resolve an action scope instead
-  // and do not use this hook.
-  collapseForMove(itemElement:HTMLElement):void {
-    this.collapseForDrag(itemElement);
-  }
-
   collapseForDrag(itemElement:HTMLElement):void {
     // Collapsing a wider selection onto the dragged card and selecting the
     // dragged card are different things; only the first is in scope here.
