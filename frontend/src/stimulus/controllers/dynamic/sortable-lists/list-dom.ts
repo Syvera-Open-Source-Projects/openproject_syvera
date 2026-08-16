@@ -60,6 +60,11 @@ export const sortableItemMobilityAttribute = 'data-sortable-lists--item-mobility
  */
 export type ItemMobility = 'fixed'|'confined'|'free';
 
+export interface DestinationIdentity {
+  type:string;
+  id:string|null;
+}
+
 const recognisedMobilities = new Set<string>(['fixed', 'confined', 'free']);
 
 // Rows are the direct children of the list's resolved rows container. The
@@ -125,6 +130,28 @@ export function isOrderableItem(itemElement:Element):boolean {
 // Whether the item may reorder in place but not change container.
 export function isConfinedItem(itemElement:Element):boolean {
   return itemMobility(itemElement) === 'confined';
+}
+
+export function sameDestination(left:DestinationIdentity|null, right:DestinationIdentity):boolean {
+  return left?.type === right.type && left.id === right.id;
+}
+
+export function permittedDestinations({
+  items,
+  candidates,
+  ownerDestinationOf,
+}:{
+  items:HTMLElement[];
+  candidates:DestinationIdentity[];
+  ownerDestinationOf:(item:HTMLElement) => DestinationIdentity|null;
+}):DestinationIdentity[] {
+  if (items.length === 0 || items.some((item) => itemMobility(item) === 'fixed')) {
+    return [];
+  }
+
+  return candidates.filter((target) => (
+    items.every((item) => itemMobility(item) === 'free' || sameDestination(ownerDestinationOf(item), target))
+  ));
 }
 
 export function resolveItemType(element:Element):string|null {

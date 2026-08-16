@@ -34,6 +34,7 @@ import {
   liveOrderableItems,
   neighbourItem,
   orderedItemElements,
+  orderedSelectedItemElements,
   orderedSelectedItems,
   resolveCandidate,
   resolveRangeItems,
@@ -161,6 +162,12 @@ describe('sortable-lists selection adapter', () => {
     const keys = new Set(['4', '1', '3'].map((id) => selectionKey({ type: 'work_package', id })));
 
     expect(orderedSelectedItems(root, keys).map((item) => item.id)).toEqual(['1', '3', '4']);
+  });
+
+  it('returns selected item elements in live document order', () => {
+    const keys = new Set(['4', '1', '3'].map((id) => selectionKey({ type: 'work_package', id })));
+
+    expect(orderedSelectedItemElements(root, keys)).toEqual([itemFor('1'), itemFor('3'), itemFor('4')]);
   });
 
   it('lists only live orderable items', () => {

@@ -38,6 +38,7 @@ import type { dropTargetForElements as dropTargetForElementsFn } from '@atlaskit
 import { setupStimulusTest, type StimulusTestContext } from 'core-stimulus/test-helpers';
 import type ListControllerType from './list.controller';
 import type { sortableItemData as sortableItemDataFn, SortableListsRoot } from './drag-and-drop';
+import type { ActionScope } from './selection-orchestrator';
 
 // The list controller is tested in ISOLATION: the root drives the outlet
 // hand-over in production (sortable-lists.controller.ts), so here we render only
@@ -76,6 +77,9 @@ describe('Sortable lists list controller', () => {
     return {
       element,
       busy,
+      actionScopeFor: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
+      selectForAction: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
+      availableDestinations: vi.fn(() => []),
       moveInDirection: vi.fn(),
       moveAvailability: vi.fn(() => null),
       ownerListElementOf: vi.fn(() => null),

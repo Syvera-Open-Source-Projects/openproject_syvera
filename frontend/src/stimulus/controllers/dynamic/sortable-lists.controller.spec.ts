@@ -1237,6 +1237,22 @@ describe('Sortable lists controller', () => {
     expect(controller.ownerListElementOf(document.createElement('li'))).toBeNull();
   });
 
+  it('exposes batch action scopes and removes destinations occupied by every member', async () => {
+    const { root, items } = renderSelectableRoot();
+    await ctx.nextFrame();
+    const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+
+    items[0].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    items[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true }));
+    const scope = controller.actionScopeFor(items[1]);
+
+    expect(scope).toMatchObject({ kind: 'batch', items: [items[0], items[1]], ids: ['1', '2'] });
+    expect(controller.availableDestinations(scope, [
+      { type: 'backlog_bucket', id: '1' },
+      { type: 'sprint', id: '1' },
+    ])).toEqual([{ type: 'sprint', id: '1' }]);
+  });
+
   describe('nested list topology', () => {
     it('resolves the source row of a nested item against its innermost list', async () => {
       const { fieldList, firstFieldItem } = renderNestedFixture();

@@ -58,11 +58,14 @@ import {
   restoreRowPositions,
   rowOf,
   rowsRemainAt,
+  permittedDestinations,
+  sameDestination,
   sortableListsBusyAttribute,
+  type DestinationIdentity,
   type MoveAvailability,
   type MoveDirection,
 } from './sortable-lists/list-dom';
-import { SelectionOrchestrator, type SelectionHost } from './sortable-lists/selection-orchestrator';
+import { SelectionOrchestrator, type ActionScope, type SelectionHost } from './sortable-lists/selection-orchestrator';
 
 type CleanupFn = () => void;
 type ElementDropPayload = ElementEventPayloadMap['onDrop'];
@@ -202,6 +205,47 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   // Live ordered membership, for AGILE-278's batch move.
   selectedIds():string[] {
     return this.selection?.selectedIds() ?? [];
+  }
+
+  actionScopeFor(itemElement:HTMLElement):ActionScope {
+    return this.selection?.actionScopeFor(itemElement)
+      ?? { kind: 'singular', invoker: itemElement, items: [], ids: [] };
+  }
+
+  selectForAction(itemElement:HTMLElement):ActionScope {
+    if (this.busy) {
+      return this.actionScopeFor(itemElement);
+    }
+
+    return this.selection?.selectForAction(itemElement)
+      ?? { kind: 'singular', invoker: itemElement, items: [], ids: [] };
+  }
+
+  availableDestinations(scope:ActionScope, candidates:DestinationIdentity[]):DestinationIdentity[] {
+    if (scope.kind === 'singular') {
+      return [];
+    }
+
+    const permitted = permittedDestinations({
+      items: scope.items,
+      candidates,
+      ownerDestinationOf: (item) => {
+        const listData = this.ownerListOf(item)?.listData;
+        return listData ? {
+          type: listData.type,
+          id: listData.listId == null ? null : String(listData.listId),
+        } : null;
+      },
+    });
+
+    return permitted.filter((target) => !scope.items.every((item) => {
+      const listData = this.ownerListOf(item)?.listData;
+      const owner = listData ? {
+        type: listData.type,
+        id: listData.listId == null ? null : String(listData.listId),
+      } : null;
+      return sameDestination(owner, target);
+    }));
   }
 
   // The batch the active drag represents, frozen at drag start. Consumed

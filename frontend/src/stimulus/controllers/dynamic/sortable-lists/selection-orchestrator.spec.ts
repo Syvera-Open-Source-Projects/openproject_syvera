@@ -539,6 +539,77 @@ describe('SelectionOrchestrator', () => {
     });
   });
 
+  describe('action scopes', () => {
+    it('reports the selected batch without changing selection or its anchor', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      const firstItem = item('1');
+      const secondItem = item('2');
+
+      orchestrator.handleClick(clickOn(firstItem));
+      orchestrator.handleClick(clickOn(secondItem, { metaKey: true }));
+      const selectedScope = orchestrator.actionScopeFor(secondItem);
+
+      expect(selectedScope).toMatchObject({ kind: 'batch', ids: ['1', '2'] });
+      expect(selectedScope.items).toEqual([firstItem, secondItem]);
+      expect(orchestrator.selectedIds()).toEqual(['1', '2']);
+
+      // The selected item's anchor remains valid for a following Shift range.
+      orchestrator.handleClick(clickOn(item('3'), { shiftKey: true }));
+      expect(orchestrator.selectedIds()).toEqual(['2', '3']);
+    });
+
+    it('reports an unselected orderable card prospectively without painting or re-anchoring it', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      const firstItem = item('1');
+      const secondItem = item('2');
+      const thirdItem = item('3');
+
+      orchestrator.handleClick(clickOn(firstItem));
+      orchestrator.handleClick(clickOn(secondItem, { metaKey: true }));
+
+      expect(orchestrator.actionScopeFor(thirdItem)).toMatchObject({
+        kind: 'batch', invoker: thirdItem, items: [thirdItem], ids: ['3'],
+      });
+      expect(isSelected(thirdItem)).toBe(false);
+      expect(orchestrator.selectedIds()).toEqual(['1', '2']);
+
+      // The original anchor is preserved, rather than reset to the prospective item.
+      orchestrator.handleClick(clickOn(thirdItem, { shiftKey: true }));
+      expect(orchestrator.selectedIds()).toEqual(['2', '3']);
+    });
+
+    it('replaces the selection for an unselected orderable action invoker', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      const firstItem = item('1');
+      const secondItem = item('2');
+      const thirdItem = item('3');
+
+      orchestrator.handleClick(clickOn(firstItem));
+      orchestrator.handleClick(clickOn(secondItem, { metaKey: true }));
+      const replacement = orchestrator.selectForAction(thirdItem);
+
+      expect(replacement).toMatchObject({ kind: 'batch', ids: ['3'] });
+      expect(replacement.items).toEqual([thirdItem]);
+      expect(orchestrator.selectedIds()).toEqual(['3']);
+    });
+
+    it('reports a fixed action invoker as singular without disturbing the selected batch', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      const firstItem = item('1');
+      const secondItem = item('2');
+      const fixedItem = item('3');
+
+      fixedItem.setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
+      orchestrator.handleClick(clickOn(firstItem));
+      orchestrator.handleClick(clickOn(secondItem, { metaKey: true }));
+
+      const fixedScope = orchestrator.selectForAction(fixedItem);
+
+      expect(fixedScope).toEqual({ kind: 'singular', invoker: fixedItem, items: [], ids: [] });
+      expect(orchestrator.selectedIds()).toEqual(['1', '2']);
+    });
+  });
+
   describe('clearAfterMove', () => {
     it('clears model, anchor and presentation without an announcement', () => {
       const orchestrator = new SelectionOrchestrator(hostFor(root));
