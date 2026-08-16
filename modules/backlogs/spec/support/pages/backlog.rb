@@ -340,6 +340,130 @@ module Pages
       dismiss_menu(work_package)
     end
 
+    # Opens one card's menu through the same four user entry points supported
+    # by Backlogs. Keeping the native key/pointer synthesis and deferred-menu
+    # wait here lets feature specs talk in product language and prevents each
+    # caller from encoding Primer's overlay structure.
+    def open_card_menu(work_package, via:)
+      case via
+      when :more
+        within_work_package(work_package) do
+          find(:button, accessible_name: "Work package actions").click
+        end
+      when :right_click
+        right_click_work_package_card(work_package)
+      when :context_menu_key
+        # Selenium's W3C key table does not expose the dedicated Context Menu
+        # key. Dispatch its browser-level KeyboardEvent against a focused card
+        # so this path still differs from Shift+F10 at the controller boundary.
+        work_package_card(work_package).execute_script(<<~JS)
+          this.focus({ focusVisible: true, preventScroll: true });
+          this.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ContextMenu',
+            bubbles: true,
+            cancelable: true
+          }));
+        JS
+      when :shift_f10
+        send_work_package_card_keys(work_package, %i[shift f10])
+      else
+        raise ArgumentError, "Unknown card-menu entry point: #{via.inspect}"
+      end
+
+      work_package_action_menu(work_package)
+    end
+
+    def expect_action_menu_groups(invoker:, selected_count:)
+      menu = work_package_action_menu(invoker)
+      singular_group = "ul[role='group'][data-sortable-lists--item-target='thisWorkPackageGroup']"
+      batch_group = "ul[role='group'][data-sortable-lists--item-target='selectedWorkPackagesGroup']"
+      singular_heading = "[data-sortable-lists--item-target='thisWorkPackageHeading']"
+      batch_heading = "[data-sortable-lists--item-target='selectedWorkPackagesHeading']"
+
+      expect(menu).to have_css(singular_group)
+      expect(menu).to have_css(batch_group)
+
+      if selected_count > 1
+        expect(menu).to have_css(singular_heading, text: "This work package")
+        expect(menu).to have_css(
+          batch_heading,
+          text: I18n.t("js.backlogs.action_menu.selected_work_packages", count: selected_count)
+        )
+      else
+        expect(menu).to have_css("#{singular_heading}[hidden]", visible: :all)
+        expect(menu).to have_css("#{batch_heading}[hidden]", visible: :all)
+      end
+    end
+
+    def activate_singular_menu_action(invoker:, action:, via: :more)
+      open_card_menu(invoker, via:).find(:menuitem, text: action, exact_text: true).click
+    end
+
+    def activate_batch_menu_action(invoker:, action:, via: :more, wait: true)
+      menu = open_card_menu(invoker, via:)
+
+      if %w[Move\ to\ top Move\ up Move\ down Move\ to\ bottom].include?(action)
+        wait_for_backlogs_turbo_stream(wait:) do
+          open_move_submenu(menu).find(:menuitem, text: action, exact_text: true, visible: :all).click
+        end
+      else
+        menu.find(:menuitem, text: action, exact_text: true).click
+      end
+    end
+
+    def expect_card_menu_anchor(work_package, via:)
+      if via == :right_click
+        expect_menu_anchored_contextually(work_package)
+      else
+        expect_menu_anchored_at_button(work_package)
+      end
+    end
+
+    def expect_card_menu_loaded(work_package)
+      expect(page.find(menu_owner_overlay_selector(work_package)))
+        .to have_no_css("include-fragment[src]", visible: :all)
+    end
+
+    def dismiss_card_menu(work_package, via:)
+      send_keys_to_focused_element(:escape)
+      expect_no_work_package_context_menu(work_package)
+
+      if via == :more
+        within_work_package(work_package) do
+          expect(page).to have_button(accessible_name: "Work package actions", focused: true)
+        end
+      else
+        expect_work_package_card_focused(work_package)
+      end
+    end
+
+    def light_dismiss_card_menu(work_package)
+      find(:heading, I18n.t(:label_backlog_and_sprints), level: 2).click
+      expect_no_work_package_context_menu(work_package)
+    end
+
+    def expect_open_menu_actions(invoker:, present:, absent:)
+      menu = work_package_action_menu(invoker)
+      present.each do |label|
+        expect(menu).to have_selector(:menuitem, text: label, exact_text: true)
+      end
+      absent.each do |label|
+        expect(menu).to have_no_selector(:menuitem, text: label, exact_text: true)
+      end
+    end
+
+    def expect_fixed_action_menu(invoker:)
+      menu = work_package_action_menu(invoker)
+
+      expect(menu).to have_css(
+        "ul[role='group'][data-sortable-lists--item-target='thisWorkPackageGroup']",
+        count: 1
+      )
+      expect(menu).to have_no_css("[data-sortable-lists--item-target='selectedWorkPackagesGroup']")
+      expect(menu).to have_selector(:menuitem, text: I18n.t(:"js.button_open_details"))
+      expect(menu).to have_selector(:menuitem, text: I18n.t(:"js.button_open_fullscreen"))
+    end
+
     def work_package_card(work_package)
       find(work_package_card_selector(work_package))
     end
@@ -1020,6 +1144,50 @@ module Pages
       stop_backlogs_move_request_probe
     end
 
+    # Records the ordered ids[] payload on the collection PUT used by a batch
+    # positional action. Request.clone() keeps the real request untouched; the
+    # async form-data read is awaited by expect_collection_move_scope.
+    def install_collection_move_scope_probe
+      page.execute_script(<<~JS)
+        window.__opBacklogsCollectionMoveScopeProbe = { requests: [] };
+
+        if (!window.__opBacklogsCollectionMoveScopeOriginalFetch) {
+          window.__opBacklogsCollectionMoveScopeOriginalFetch = window.fetch;
+        }
+
+        window.fetch = (...args) => {
+          const request = args[0];
+          const options = args[1] ?? {};
+          const url = String(request?.url ?? request);
+          const method = String(request?.method ?? options.method ?? 'GET').toUpperCase();
+
+          if (method === 'PUT' && url.includes('/backlogs/')) {
+            const formData = request instanceof Request
+              ? request.clone().formData()
+              : Promise.resolve(options.body);
+
+            void formData.then((body) => {
+              window.__opBacklogsCollectionMoveScopeProbe.requests.push({
+                ids: body instanceof FormData ? body.getAll('ids[]').map(String) : []
+              });
+            });
+          }
+
+          return window.__opBacklogsCollectionMoveScopeOriginalFetch(...args);
+        };
+      JS
+    end
+
+    def expect_collection_move_scope(*work_packages)
+      wait_for do
+        page.evaluate_script(
+          "window.__opBacklogsCollectionMoveScopeProbe?.requests?.at(-1)?.ids ?? null"
+        )
+      end.to eq(work_packages.map { |work_package| work_package.id.to_s })
+    ensure
+      stop_collection_move_scope_probe
+    end
+
     def expect_no_filter_count(type)
       within_filter_container(type) do
         within_test_selector(filter_button_label(type)) do
@@ -1321,6 +1489,10 @@ module Pages
     # is the one place that convention lives.
     def menu_owner_overlay_selector(menu_owner)
       "##{ActionView::RecordIdentifier.dom_target(menu_owner, :menu)}-overlay"
+    end
+
+    def work_package_action_menu(work_package)
+      page.find(menu_owner_overlay_selector(work_package)).find(:menu)
     end
 
     # Located by the lock's accessible name so the expectation fails if the
@@ -1702,6 +1874,15 @@ module Pages
       page.execute_script(<<~JS)
         if (window.__opBacklogsOriginalFetch) {
           window.fetch = window.__opBacklogsOriginalFetch;
+        }
+      JS
+    end
+
+    def stop_collection_move_scope_probe
+      page.execute_script(<<~JS)
+        if (window.__opBacklogsCollectionMoveScopeOriginalFetch) {
+          window.fetch = window.__opBacklogsCollectionMoveScopeOriginalFetch;
+          delete window.__opBacklogsCollectionMoveScopeOriginalFetch;
         }
       JS
     end
