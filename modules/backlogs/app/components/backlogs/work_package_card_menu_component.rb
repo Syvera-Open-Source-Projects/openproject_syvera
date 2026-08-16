@@ -54,9 +54,9 @@ module Backlogs
 
     private
 
-    # Positional moves reorder within the card's own list, which the server
-    # allows even for a read-only work package, so they gate on the page-level
-    # permission alone. Only the cross-container moves below require movable?.
+    # Render positional and destination candidates for every sortable card.
+    # The client projects them against the settled action scope, and the
+    # server rechecks authoritative batch availability on submission.
     def show_move_items?
       sortable?
     end
