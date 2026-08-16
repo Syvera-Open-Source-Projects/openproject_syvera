@@ -422,6 +422,10 @@ export default class SortableListsController extends Controller<HTMLElement> imp
       return null;
     }
 
+    if (!this.resolveCollectionMoveUrl()) {
+      return { top: false, up: false, down: false, bottom: false };
+    }
+
     const list = this.ownerListOf(itemElement);
 
     return list
@@ -461,7 +465,12 @@ export default class SortableListsController extends Controller<HTMLElement> imp
       return;
     }
 
-    if (this.selection && this.hasCollectionMoveUrlValue) {
+    if (this.selection) {
+      const moveUrl = this.resolveCollectionMoveUrl();
+      if (!moveUrl) {
+        return;
+      }
+
       const scope = this.selectForAction(itemElement);
       if (scope.kind === 'singular') {
         return;
@@ -477,8 +486,7 @@ export default class SortableListsController extends Controller<HTMLElement> imp
         direction,
         rowsContainer: list.rowsContainer,
       });
-      const moveUrl = this.resolveCollectionMoveUrl();
-      if (!resolution.available || !moveUrl) {
+      if (!resolution.available) {
         return;
       }
 
@@ -513,12 +521,6 @@ export default class SortableListsController extends Controller<HTMLElement> imp
     if (!moveUrl || !sourceRow) {
       return;
     }
-
-    // Last, after every resolution above has succeeded. Several of those
-    // steps bail — an unavailable direction, no owner list, no move URL —
-    // and collapsing earlier would destroy the batch for a menu action that
-    // then does nothing at all.
-    this.selection?.collapseForMove(itemElement);
 
     void this.performMove({
       rows: [sourceRow],
