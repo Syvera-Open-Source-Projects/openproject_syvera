@@ -227,18 +227,12 @@ class Backlogs::WorkPackages::BatchUpdateService
   # assignable_sprints/backlog_bucket_belongs_to_project checks so a batch
   # move and a single-work-package save reject the same unavailable targets.
   def revalidate_target_availability!(target)
-    raise BatchFailure, unavailable_target_failure unless target_available?(target)
-  end
-
-  def target_available?(target)
-    case target
-    in Backlogs::Target::SprintId
-      Sprint.assignable(project: batch_project, user:).exists?(id: target.list_id)
-    in Backlogs::Target::BucketId
-      BacklogBucket.for_project(batch_project).exists?(id: target.list_id)
-    in Backlogs::Target::InboxId
-      true
-    end
+    availability = Backlogs::WorkPackages::DestinationAvailability.new(
+      project: batch_project,
+      user:,
+      work_packages:
+    )
+    raise BatchFailure, unavailable_target_failure unless availability.permitted?(target)
   end
 
   def last_non_batch_member(target)
