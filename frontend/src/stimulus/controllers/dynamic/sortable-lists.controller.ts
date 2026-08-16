@@ -51,11 +51,11 @@ import {
   isOrderableItem,
   reorderRows,
   resolveDirectionalPreviousItemId,
+  resolveBlockMoveAvailability,
   resolveItemId,
   resolveItemLabel,
   resolveItemPosition,
   resolveItemType,
-  resolveMoveAvailability,
   restoreRowPositions,
   rowOf,
   rowsRemainAt,
@@ -416,9 +416,16 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   // addressable. Null means the item is not in an owned list (yet). The result
   // is a snapshot for menu gating; the click path re-resolves the live DOM.
   moveAvailability(itemElement:HTMLElement):MoveAvailability|null {
+    const scope = this.actionScopeFor(itemElement);
+    if (scope.kind === 'singular') {
+      return null;
+    }
+
     const list = this.ownerListOf(itemElement);
 
-    return list ? resolveMoveAvailability({ itemElement, rowsContainer: list.rowsContainer }) : null;
+    return list
+      ? resolveBlockMoveAvailability({ itemElements: scope.items, rowsContainer: list.rowsContainer })
+      : null;
   }
 
   moveToDestination(itemElement:HTMLElement, target:DestinationIdentity):void {

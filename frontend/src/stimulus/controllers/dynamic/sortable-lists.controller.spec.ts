@@ -1210,13 +1210,88 @@ describe('Sortable lists controller', () => {
   });
 
   it('reports per-direction move availability for gating', async () => {
-    const { root, firstSourceItem } = renderFixture();
+    const { root, firstSourceItem } = renderSelectableRoot();
     await ctx.nextFrame();
     const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
 
     // First item: down/bottom available, up/top not.
     expect(controller.moveAvailability(firstSourceItem)).toEqual({
       top: false, up: false, down: true, bottom: true,
+    });
+  });
+
+  describe('batch move availability', () => {
+    const unavailable = { top: false, up: false, down: false, bottom: false };
+    const select = (element:HTMLElement, init:MouseEventInit = {}) => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
+    };
+
+    it('reports the available directions for a selected contiguous block', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      select(items[1]);
+      select(items[2], { metaKey: true });
+
+      expect(controller.moveAvailability(items[1])).toEqual({
+        top: true, up: true, down: false, bottom: false,
+      });
+    });
+
+    it('reports every direction unavailable for a sparse selection', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      select(items[0]);
+      select(items[2], { metaKey: true });
+
+      expect(controller.moveAvailability(items[0])).toEqual(unavailable);
+    });
+
+    it('reports every direction unavailable for a cross-list selection', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      select(items[2]);
+      select(items[3], { metaKey: true });
+
+      expect(controller.moveAvailability(items[2])).toEqual(unavailable);
+    });
+
+    it('reports one-card availability for an unselected invoker without changing the selection', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      select(items[0]);
+      select(items[1], { metaKey: true });
+
+      expect(controller.moveAvailability(items[3])).toEqual({
+        top: false, up: false, down: true, bottom: true,
+      });
+      expect(items.filter((item) => item.hasAttribute('data-batch-selected'))).toEqual([items[0], items[1]]);
+    });
+
+    it('reports normal within-list availability for a confined contiguous block', async () => {
+      const { root, items } = renderSelectableRoot();
+      items[0].setAttribute('data-sortable-lists--item-mobility-value', 'confined');
+      items[1].setAttribute('data-sortable-lists--item-mobility-value', 'confined');
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      select(items[0]);
+      select(items[1], { metaKey: true });
+
+      expect(controller.moveAvailability(items[0])).toEqual({
+        top: false, up: false, down: true, bottom: true,
+      });
+    });
+
+    it('reports null for a fixed invoker', async () => {
+      const { root, items } = renderSelectableRoot();
+      items[0].setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+
+      expect(controller.moveAvailability(items[0])).toBeNull();
     });
   });
 
