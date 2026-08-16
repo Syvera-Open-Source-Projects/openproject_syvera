@@ -1253,6 +1253,185 @@ describe('Sortable lists controller', () => {
     ])).toEqual([{ type: 'sprint', id: '1' }]);
   });
 
+  describe('direct destination moves', () => {
+    const destination = { type: 'inbox', id: null };
+
+    function destinationController(root:HTMLElement) {
+      return ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+    }
+
+    function selectItem(element:HTMLElement, init:MouseEventInit = {}):void {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
+    }
+
+    function destinationSelected(element:HTMLElement):boolean {
+      return element.hasAttribute('data-batch-selected');
+    }
+
+    it('submits the selected scope in document order without optimistic or positional fields', async () => {
+      fetchMock.mockResolvedValueOnce(new Response('', {
+        headers: { 'Content-Type': 'text/vnd.turbo-stream.html' },
+        status: 422,
+      }));
+      const { root, sourceList, items } = renderSelectableRoot({
+        optimistic: true,
+        collectionMoveUrl: '/projects/demo/backlogs/work_packages/move',
+      });
+      sourceList.insertBefore(items[1], items[0]);
+      await ctx.nextFrame();
+      selectItem(items[0]);
+      selectItem(items[1], { metaKey: true });
+
+      destinationController(root).moveToDestination(items[0], destination);
+      await flushPromises();
+
+      const [requestUrl, requestOptions] = fetchMock.mock.lastCall as [string, { body:FormData }];
+      expect(requestUrl).toBe('/projects/demo/backlogs/work_packages/move');
+      expect([...requestOptions.body.entries()]).toEqual([
+        ['ids[]', '2'],
+        ['ids[]', '1'],
+        ['list_type', 'inbox'],
+        ['list_id', ''],
+      ]);
+      expect(requestOptions.body.has('prev_id')).toBe(false);
+      expect(requestOptions.body.has('optimistic')).toBe(false);
+      expect(items.filter(destinationSelected)).toEqual([items[0], items[1]]);
+      await waitFor(() => expect(root.hasAttribute('data-sortable-lists-busy')).toBe(false));
+      expect(renderStreamMessageMock).toHaveBeenCalledOnce();
+    });
+
+    it('replaces an unrelated selection when an unselected card invokes the action', async () => {
+      fetchMock.mockResolvedValueOnce(new Response('', { status: 422 }));
+      const { root, items } = renderSelectableRoot({ collectionMoveUrl: '/batch/move' });
+      await ctx.nextFrame();
+      selectItem(items[1]);
+      selectItem(items[2], { metaKey: true });
+
+      destinationController(root).moveToDestination(items[0], destination);
+      await flushPromises();
+
+      const requestOptions = fetchMock.mock.lastCall?.[1] as { body:FormData };
+      expect(requestOptions.body.getAll('ids[]')).toEqual(['1']);
+      expect(items.filter(destinationSelected)).toEqual([items[0]]);
+    });
+
+    it('does not reorder or clear selection before a successful frame stream reconciles the root', async () => {
+      fetchMock.mockResolvedValueOnce(new Response('<turbo-stream></turbo-stream>', {
+        headers: { 'Content-Type': 'text/vnd.turbo-stream.html' },
+        status: 200,
+      }));
+      const { root, sourceList, items } = renderSelectableRoot({ collectionMoveUrl: '/batch/move' });
+      await ctx.nextFrame();
+      selectItem(items[0]);
+      selectItem(items[1], { metaKey: true });
+
+      destinationController(root).moveToDestination(items[0], destination);
+      await waitFor(() => expect(root.hasAttribute('data-sortable-lists-busy')).toBe(false));
+
+      expect(itemIds(sourceList)).toEqual(['1', '2', '3']);
+      expect(items.filter(destinationSelected)).toEqual([items[0], items[1]]);
+      expect(renderStreamMessageMock).toHaveBeenCalledOnce();
+    });
+
+    it('does not mutate selection or submit while another move is busy', async () => {
+      const { root, items } = renderSelectableRoot({ collectionMoveUrl: '/batch/move' });
+      await ctx.nextFrame();
+      selectItem(items[1]);
+      root.setAttribute('data-sortable-lists-busy', 'true');
+      const controller = destinationController(root);
+
+      const prospectiveScope = controller.selectForAction(items[0]);
+      controller.moveToDestination(items[0], destination);
+      await flushPromises();
+
+      expect(prospectiveScope).toMatchObject({ kind: 'batch', ids: ['1'] });
+      expect(items.filter(destinationSelected)).toEqual([items[1]]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('clears a detached request busy marker when the cached root reconnects', async () => {
+      let resolveRequest!:(response:Response) => void;
+      fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        resolveRequest = resolve;
+      }));
+      const { root, items } = renderSelectableRoot({ collectionMoveUrl: '/batch/move' });
+      await ctx.nextFrame();
+
+      destinationController(root).moveToDestination(items[0], destination);
+      expect(root.hasAttribute('data-sortable-lists-busy')).toBe(true);
+
+      root.remove();
+      await ctx.nextFrame();
+      resolveRequest(new Response('', { status: 200 }));
+      await flushPromises();
+
+      // The settled request deliberately leaves a detached element alone.
+      expect(root.hasAttribute('data-sortable-lists-busy')).toBe(true);
+
+      fixture.append(root);
+      await ctx.nextFrame();
+      await ctx.nextFrame();
+
+      expect(root.hasAttribute('data-sortable-lists-busy')).toBe(false);
+
+      fetchMock.mockResolvedValueOnce(new Response('', {
+        headers: { 'Content-Type': 'text/vnd.turbo-stream.html' },
+        status: 422,
+      }));
+      destinationController(root).moveToDestination(items[0], destination);
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(root.hasAttribute('data-sortable-lists-busy')).toBe(false));
+    });
+
+    it('keeps a reconnected root busy until its detached request settles', async () => {
+      let resolveRequest!:(response:Response) => void;
+      fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        resolveRequest = resolve;
+      }));
+      const { root, items } = renderSelectableRoot({ collectionMoveUrl: '/batch/move' });
+      await ctx.nextFrame();
+
+      destinationController(root).moveToDestination(items[0], destination);
+      expect(root.hasAttribute('data-sortable-lists-busy')).toBe(true);
+
+      root.remove();
+      await ctx.nextFrame();
+      fixture.append(root);
+      await ctx.nextFrame();
+      await ctx.nextFrame();
+
+      expect(root.hasAttribute('data-sortable-lists-busy')).toBe(true);
+
+      destinationController(root).moveToDestination(items[1], destination);
+      await flushPromises();
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      resolveRequest(new Response('', { status: 200 }));
+      await waitFor(() => expect(root.hasAttribute('data-sortable-lists-busy')).toBe(false));
+    });
+
+    it.each([
+      ['a 500 Turbo Stream response', () => Promise.resolve(new Response('<turbo-stream></turbo-stream>', {
+        headers: { 'Content-Type': 'text/vnd.turbo-stream.html' },
+        status: 500,
+      })), 1],
+      ['a successful non-stream response', () => Promise.resolve(new Response('', { status: 200 })), 0],
+      ['a rejected request', () => Promise.reject(new Error('Network failure')), 0],
+    ])('clears busy state after %s', async (_description, request, streamRenderCount) => {
+      fetchMock.mockImplementationOnce(request);
+      const { root, items } = renderSelectableRoot({ collectionMoveUrl: '/batch/move' });
+      await ctx.nextFrame();
+
+      destinationController(root).moveToDestination(items[0], destination);
+      expect(root.hasAttribute('data-sortable-lists-busy')).toBe(true);
+      await flushPromises();
+
+      await waitFor(() => expect(root.hasAttribute('data-sortable-lists-busy')).toBe(false));
+      expect(renderStreamMessageMock).toHaveBeenCalledTimes(streamRenderCount);
+    });
+  });
+
   describe('nested list topology', () => {
     it('resolves the source row of a nested item against its innermost list', async () => {
       const { fieldList, firstFieldItem } = renderNestedFixture();

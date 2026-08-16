@@ -80,6 +80,7 @@ describe('Sortable lists list controller', () => {
       actionScopeFor: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       selectForAction: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       availableDestinations: vi.fn(() => []),
+      moveToDestination: vi.fn(),
       moveInDirection: vi.fn(),
       moveAvailability: vi.fn(() => null),
       ownerListElementOf: vi.fn(() => null),

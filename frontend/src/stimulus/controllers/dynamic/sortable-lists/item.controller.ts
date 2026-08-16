@@ -182,6 +182,41 @@ export default class ItemController extends Controller<HTMLElement> implements R
     }
   }
 
+  prepareDialog(event:CustomEvent<{ form:HTMLFormElement|null }>):void {
+    const scope = this.root?.selectForAction(this.element);
+    const form = event.detail.form;
+    if (!form || !scope || scope.kind === 'singular') {
+      event.preventDefault();
+      return;
+    }
+
+    form.querySelectorAll('[data-sortable-lists-generated-id]').forEach((input) => input.remove());
+    scope.ids.forEach((id) => {
+      const input = form.ownerDocument.createElement('input');
+      input.type = 'hidden';
+      input.name = 'ids[]';
+      input.value = id;
+      input.dataset.sortableListsGeneratedId = '';
+      form.append(input);
+    });
+  }
+
+  moveToDestination(event:ActionEvent):void {
+    const item = event.currentTarget;
+    if (!this.hasMenuElement || !(item instanceof HTMLElement)) {
+      return;
+    }
+
+    if (this.menuElement.isItemDisabled(item) || this.menuElement.isItemHidden(item)) {
+      return;
+    }
+
+    const candidates = this.destinationCandidates(item);
+    if (candidates.length === 1) {
+      this.root?.moveToDestination(this.element, candidates[0]);
+    }
+  }
+
   // The focus host is the consumer's business: Backlogs puts the tab stop on
   // the card inside the row, another consumer may make the row itself
   // focusable. Both work without the root learning either shape.
