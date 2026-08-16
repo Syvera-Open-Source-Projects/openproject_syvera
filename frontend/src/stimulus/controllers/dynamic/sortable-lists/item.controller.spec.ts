@@ -1218,11 +1218,11 @@ describe('Sortable lists item controller', () => {
       const selectedHeadingId = `selected-work-packages-heading-${idNumber}`;
 
       return [
-        `<div hidden data-sortable-lists--item-target="thisWorkPackageHeading"><div id="${thisHeadingId}">This work package</div></div>`,
-        `<ul aria-labelledby="${thisHeadingId}" data-sortable-lists--item-target="thisWorkPackageGroup"><li>Open details</li></ul>`,
+        `<div hidden data-sortable-lists--item-target="invokerHeading"><div id="${thisHeadingId}">This work package</div></div>`,
+        `<ul aria-labelledby="${thisHeadingId}" data-sortable-lists--item-target="invokerGroup"><li>Open details</li></ul>`,
         ...(includeSelectedGroup ? [
-          `<div hidden data-sortable-lists--item-target="selectedWorkPackagesHeading"><div id="${selectedHeadingId}">0 selected work packages</div></div>`,
-          `<ul aria-labelledby="${selectedHeadingId}" data-sortable-lists--item-target="selectedWorkPackagesGroup"></ul>`,
+          `<div hidden data-i18n-key="js.backlogs.action_menu.selected_work_packages" data-sortable-lists--item-target="batchHeading"><div id="${selectedHeadingId}">0 selected work packages</div></div>`,
+          `<ul aria-labelledby="${selectedHeadingId}" data-sortable-lists--item-target="batchGroup"></ul>`,
         ] : []),
       ].join('');
     }
@@ -1247,7 +1247,7 @@ describe('Sortable lists item controller', () => {
         + ' data-action="click->sortable-lists--item#move"><button></button></li>'
       )).join('');
       if (actionGroups !== 'singular') {
-        const selectedGroup = menuElement.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]');
+        const selectedGroup = menuElement.querySelector('[data-sortable-lists--item-target="batchGroup"]');
         (selectedGroup ?? menuElement).appendChild(parent);
       }
       el.appendChild(menuElement);
@@ -1272,7 +1272,7 @@ describe('Sortable lists item controller', () => {
       const item = document.createElement('li');
       item.setAttribute('data-sortable-lists--item-target', 'destinationItem');
       item.dataset.sortableListsDestinations = metadata;
-      const destinationParent = el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]')
+      const destinationParent = el.querySelector('[data-sortable-lists--item-target="batchGroup"]')
         ?? el.querySelector('action-menu')!;
       destinationParent.prepend(item);
       return item;
@@ -1565,11 +1565,63 @@ describe('Sortable lists item controller', () => {
       const destination = destinationFor(el, [{ type: 'sprint', id: '1' }]);
       await menuCtx!.nextFrame();
 
-      expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'invokerHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).not.toHaveAttribute('hidden');
       expect(destination).not.toHaveAttribute('hidden');
       expect(actionTarget(el, 'moveMenu')).not.toHaveAttribute('hidden');
+    });
+
+    it('projects generic group labels across one-card and true-batch scopes', async () => {
+      const { el } = renderItemWithMenu(1);
+      const invokerHeadingId = 'invoker-heading-1';
+      const batchHeadingId = 'batch-heading-1';
+      el.querySelector('action-menu')!.insertAdjacentHTML('afterbegin', [
+        `<div hidden data-sortable-lists--item-target="invokerHeading"><div id="${invokerHeadingId}">This work package</div></div>`,
+        `<ul role="group" aria-labelledby="${invokerHeadingId}" data-sortable-lists--item-target="invokerGroup"><li>Open details</li></ul>`,
+        `<div hidden data-i18n-key="js.backlogs.action_menu.selected_work_packages" data-sortable-lists--item-target="batchHeading"><div id="${batchHeadingId}">0 selected work packages</div></div>`,
+        `<ul role="group" aria-labelledby="${batchHeadingId}" data-sortable-lists--item-target="batchGroup"></ul>`,
+      ].join(''));
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const oneCard:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1'] };
+      const trueBatch:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1', '2', '3'] };
+      let scope = oneCard;
+      const { root, actionScopeFor } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      actionScopeFor.mockImplementation(() => scope);
+      controller.connectRoot(root);
+      const menuElement = el.querySelector('action-menu')!;
+      menuElement.dispatchEvent(new ToggleEvent('toggle', {
+        newState: 'open',
+        oldState: 'closed',
+      }));
+      await menuCtx!.nextFrame();
+
+      const invokerHeading = actionTarget(el, 'invokerHeading');
+      const batchHeading = actionTarget(el, 'batchHeading');
+      const invokerGroup = actionTarget(el, 'invokerGroup');
+      const batchGroup = actionTarget(el, 'batchGroup');
+      const batchTitle = document.getElementById(batchHeadingId)!;
+
+      expect(invokerHeading).toHaveAttribute('hidden');
+      expect(batchHeading).toHaveAttribute('hidden');
+      expect(invokerGroup).not.toHaveAttribute('aria-labelledby');
+      expect(batchGroup).not.toHaveAttribute('aria-labelledby');
+      expect(invokerGroup).toHaveAccessibleName('');
+      expect(batchGroup).toHaveAccessibleName('');
+
+      scope = trueBatch;
+      menuElement.dispatchEvent(new ToggleEvent('toggle', {
+        newState: 'open',
+        oldState: 'closed',
+      }));
+
+      expect(invokerHeading).not.toHaveAttribute('hidden');
+      expect(batchHeading).not.toHaveAttribute('hidden');
+      expect(invokerGroup).toHaveAttribute('aria-labelledby', invokerHeadingId);
+      expect(batchGroup).toHaveAttribute('aria-labelledby', batchHeadingId);
+      expect(document.getElementById(batchHeadingId)).toBe(batchTitle);
+      expect(batchTitle).toHaveTextContent('3 selected work packages');
     });
 
     it('reveals both headings with the selected count for a true batch', async () => {
@@ -1582,15 +1634,15 @@ describe('Sortable lists item controller', () => {
       availableDestinations.mockImplementation((_scope, candidates) => candidates);
       controller.connectRoot(root);
 
-      const selectedHeading = actionTarget(el, 'selectedWorkPackagesHeading');
-      const selectedGroup = actionTarget(el, 'selectedWorkPackagesGroup');
+      const selectedHeading = actionTarget(el, 'batchHeading');
+      const selectedGroup = actionTarget(el, 'batchGroup');
       const selectedTitleId = selectedGroup.getAttribute('aria-labelledby')!;
       const selectedTitle = document.getElementById(selectedTitleId)!;
 
       destinationFor(el, [{ type: 'sprint', id: '1' }]);
       await menuCtx!.nextFrame();
 
-      expect(actionTarget(el, 'thisWorkPackageHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'invokerHeading')).not.toHaveAttribute('hidden');
       expect(selectedHeading).not.toHaveAttribute('hidden');
       expect(selectedGroup).not.toHaveAttribute('hidden');
       expect(selectedGroup).toHaveAttribute('aria-labelledby', selectedTitleId);
@@ -1615,7 +1667,7 @@ describe('Sortable lists item controller', () => {
 
       expect(destination).not.toHaveAttribute('hidden');
       expect(actionTarget(el, 'moveMenu')).toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).not.toHaveAttribute('hidden');
     });
 
     it('projects deferred destination items for the selected invoker', async () => {
@@ -1654,10 +1706,10 @@ describe('Sortable lists item controller', () => {
       destinationFor(el, [{ type: 'inbox', id: null }]);
       await menuCtx!.nextFrame();
 
-      expect(actionTarget(el, 'thisWorkPackageHeading')).not.toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).not.toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveTextContent('3 selected work packages');
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'invokerHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchHeading')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchHeading')).toHaveTextContent('3 selected work packages');
+      expect(actionTarget(el, 'batchGroup')).not.toHaveAttribute('hidden');
     });
 
     it('recomputes selected multi-card and prospective one-card scopes whenever the menu opens', async () => {
@@ -1723,7 +1775,7 @@ describe('Sortable lists item controller', () => {
       expect(menu.showItem).toHaveBeenCalledWith(liFor(el, 'up'));
       expect(menu.showItem).toHaveBeenCalledWith(liFor(el, 'down'));
       expect(menu.hideItem).toHaveBeenCalledWith(liFor(el, 'bottom'));
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).not.toHaveAttribute('hidden');
     });
 
     it('hides an all-unavailable batch position submenu and its directions', async () => {
@@ -1746,8 +1798,8 @@ describe('Sortable lists item controller', () => {
       for (const direction of ['top', 'up', 'down', 'bottom']) {
         expect(menu.hideItem).toHaveBeenCalledWith(liFor(el, direction));
       }
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).toHaveAttribute('hidden');
     });
 
     it('keeps only the current owner destination for a confined batch scope', async () => {
@@ -1780,9 +1832,9 @@ describe('Sortable lists item controller', () => {
 
       expect(() => controller.moveItemTargetConnected()).not.toThrow();
 
-      expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
-      expect(el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]')).toBeNull();
-      expect(el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesHeading"]')).toBeNull();
+      expect(actionTarget(el, 'invokerHeading')).toHaveAttribute('hidden');
+      expect(el.querySelector('[data-sortable-lists--item-target="batchGroup"]')).toBeNull();
+      expect(el.querySelector('[data-sortable-lists--item-target="batchHeading"]')).toBeNull();
     });
 
     it('hides a stale batch action skeleton for a fixed singular invoker', async () => {
@@ -1809,9 +1861,9 @@ describe('Sortable lists item controller', () => {
       const destination = destinationFor(el, [{ type: 'sprint', id: '1' }]);
       await menuCtx!.nextFrame();
 
-      expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'invokerHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).toHaveAttribute('hidden');
       expect(destination).toHaveAttribute('hidden');
       expect(actionTarget(el, 'moveMenu')).toHaveAttribute('hidden');
 

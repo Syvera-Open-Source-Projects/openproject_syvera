@@ -375,28 +375,30 @@ module Pages
 
     def expect_action_menu_groups(invoker:, selected_count:)
       menu = work_package_action_menu(invoker)
-      singular_group = "ul[role='group'][data-sortable-lists--item-target='thisWorkPackageGroup']"
-      batch_group = "ul[role='group'][data-sortable-lists--item-target='selectedWorkPackagesGroup']"
-      singular_heading = "[data-sortable-lists--item-target='thisWorkPackageHeading']"
-      batch_heading = "[data-sortable-lists--item-target='selectedWorkPackagesHeading']"
+      invoker_heading = "[data-sortable-lists--item-target='invokerHeading']"
+      batch_heading = "[data-sortable-lists--item-target='batchHeading']"
 
-      expect(menu).to have_css(singular_group)
-      expect(menu).to have_css(batch_group)
+      expect(menu).to have_element(
+        :ul,
+        role: "group",
+        "data-sortable-lists--item-target": "invokerGroup"
+      )
+      expect(menu).to have_element(
+        :ul,
+        role: "group",
+        "data-sortable-lists--item-target": "batchGroup"
+      )
 
       if selected_count > 1
-        expect(menu).to have_css(singular_heading, text: "This work package")
+        expect(menu).to have_css(invoker_heading, text: "This work package")
         expect(menu).to have_css(
           batch_heading,
           text: I18n.t("js.backlogs.action_menu.selected_work_packages", count: selected_count)
         )
       else
-        expect(menu).to have_css("#{singular_heading}[hidden]", visible: :all)
+        expect(menu).to have_css("#{invoker_heading}[hidden]", visible: :all)
         expect(menu).to have_css("#{batch_heading}[hidden]", visible: :all)
       end
-    end
-
-    def activate_singular_menu_action(invoker:, action:, via: :more)
-      open_card_menu(invoker, via:).find(:menuitem, text: action, exact_text: true).click
     end
 
     def activate_batch_menu_action(invoker:, action:, via: :more, wait: true)
@@ -456,10 +458,10 @@ module Pages
       menu = work_package_action_menu(invoker)
 
       expect(menu).to have_css(
-        "ul[role='group'][data-sortable-lists--item-target='thisWorkPackageGroup']",
+        "ul[role='group'][data-sortable-lists--item-target='invokerGroup']",
         count: 1
       )
-      expect(menu).to have_no_css("[data-sortable-lists--item-target='selectedWorkPackagesGroup']")
+      expect(menu).to have_no_css("[data-sortable-lists--item-target='batchGroup']")
       expect(menu).to have_selector(:menuitem, text: I18n.t(:"js.button_open_details"))
       expect(menu).to have_selector(:menuitem, text: I18n.t(:"js.button_open_fullscreen"))
     end
@@ -898,7 +900,7 @@ module Pages
     def select_contiguous_cards(first, last)
       toggle_card(first)
       extend_selection_to(last)
-      expect(page).to have_css("[data-batch-selected]", count: 2)
+      expect(selected_card_ids).to include(first.id.to_s, last.id.to_s)
     end
 
     def expect_selected_cards_in_order(*work_packages)

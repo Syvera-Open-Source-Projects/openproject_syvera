@@ -29,11 +29,11 @@ See COPYRIGHT and LICENSE files for more details.
 
 <%=
   render(Primer::Alpha::ActionMenu::List.new(menu_id:)) do |list|
-    list.with_group(data: { sortable_lists__item_target: "thisWorkPackageGroup" }) do |group|
+    list.with_group(data: { sortable_lists__item_target: "invokerGroup" }) do |group|
       group.with_heading(
         title: t(".action_menu.this_work_package"),
         hidden: true,
-        data: { sortable_lists__item_target: "thisWorkPackageHeading" }
+        data: { sortable_lists__item_target: "invokerHeading" }
       )
 
       group.with_item(
@@ -80,11 +80,14 @@ See COPYRIGHT and LICENSE files for more details.
     end
 
     if show_move_submenu?
-      list.with_group(data: { sortable_lists__item_target: "selectedWorkPackagesGroup" }) do |group|
+      list.with_group(data: { sortable_lists__item_target: "batchGroup" }) do |group|
         group.with_heading(
           title: t("js.backlogs.action_menu.selected_work_packages", count: 0),
           hidden: true,
-          data: { sortable_lists__item_target: "selectedWorkPackagesHeading" }
+          data: {
+            sortable_lists__item_target: "batchHeading",
+            i18n_key: "js.backlogs.action_menu.selected_work_packages"
+          }
         )
 
         if show_move_to_inbox?

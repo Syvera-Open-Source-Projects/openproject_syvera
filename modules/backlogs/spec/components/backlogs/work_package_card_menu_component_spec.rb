@@ -192,39 +192,40 @@ RSpec.describe Backlogs::WorkPackageCardMenuComponent, type: :component do
     end
 
     it "renders two stable groups with initially hidden accessible headings", :aggregate_failures do
-      this_work_package_group = action_group("thisWorkPackageGroup")
-      selected_work_packages_group = action_group("selectedWorkPackagesGroup")
-      this_work_package_heading = hidden_action_heading("thisWorkPackageHeading")
-      selected_work_packages_heading = hidden_action_heading("selectedWorkPackagesHeading")
+      invoker_group = action_group("invokerGroup")
+      batch_group = action_group("batchGroup")
+      invoker_heading = hidden_action_heading("invokerHeading")
+      batch_heading = hidden_action_heading("batchHeading")
 
       expect(page).to have_css("ul[role='group']", count: 2)
-      expect(this_work_package_heading).to have_text("This work package")
-      expect(selected_work_packages_heading).to have_text("0 selected work packages")
-      expect(this_work_package_group["aria-labelledby"]).to eq(
-        this_work_package_heading.find(".ActionList-sectionDivider-title", visible: :all)[:id]
+      expect(invoker_heading).to have_text("This work package")
+      expect(batch_heading).to have_text("0 selected work packages")
+      expect(invoker_group["aria-labelledby"]).to eq(
+        invoker_heading.find(".ActionList-sectionDivider-title", visible: :all)[:id]
       )
-      expect(selected_work_packages_group["aria-labelledby"]).to eq(
-        selected_work_packages_heading.find(".ActionList-sectionDivider-title", visible: :all)[:id]
+      expect(batch_group["aria-labelledby"]).to eq(
+        batch_heading.find(".ActionList-sectionDivider-title", visible: :all)[:id]
       )
+      expect(batch_heading["data-i18n-key"]).to eq "js.backlogs.action_menu.selected_work_packages"
     end
 
     it "renders singular actions only in the first group", :aggregate_failures do
       %i[open_details open_fullscreen copy_url_to_clipboard copy_work_package_id].each do |action|
-        expect(action_group("thisWorkPackageGroup")).to have_css("#work_package_#{work_package.id}_menu_#{action}")
-        expect(action_group("selectedWorkPackagesGroup")).to have_no_css("#work_package_#{work_package.id}_menu_#{action}")
+        expect(action_group("invokerGroup")).to have_css("#work_package_#{work_package.id}_menu_#{action}")
+        expect(action_group("batchGroup")).to have_no_css("#work_package_#{work_package.id}_menu_#{action}")
       end
     end
 
     it "renders destination and position actions only in the second group", :aggregate_failures do
       %i[move_to_inbox move_to_backlog_bucket move_to_sprint].each do |action|
-        expect(action_group("selectedWorkPackagesGroup")).to have_css("#work_package_#{work_package.id}_menu_#{action}")
-        expect(action_group("thisWorkPackageGroup")).to have_no_css("#work_package_#{work_package.id}_menu_#{action}")
+        expect(action_group("batchGroup")).to have_css("#work_package_#{work_package.id}_menu_#{action}")
+        expect(action_group("invokerGroup")).to have_no_css("#work_package_#{work_package.id}_menu_#{action}")
       end
-      expect(action_group("selectedWorkPackagesGroup")).to have_css(
+      expect(action_group("batchGroup")).to have_css(
         "li[data-sortable-lists--item-target='moveMenu']",
         text: "Move to position"
       )
-      expect(action_group("thisWorkPackageGroup")).to have_no_css("li[data-sortable-lists--item-target='moveMenu']")
+      expect(action_group("invokerGroup")).to have_no_css("li[data-sortable-lists--item-target='moveMenu']")
       expect(page).to have_no_css("[data-sortable-lists--item-target='moveDivider']")
     end
 
@@ -237,7 +238,7 @@ RSpec.describe Backlogs::WorkPackageCardMenuComponent, type: :component do
       actions.each do |action|
         expect(page.find("#work_package_#{work_package.id}_menu_#{action}")[:tabindex]).to eq("-1")
       end
-      expect(action_group("selectedWorkPackagesGroup")).to have_css(
+      expect(action_group("batchGroup")).to have_css(
         "li[data-sortable-lists--item-target='moveMenu'] > button[role='menuitem'][tabindex='-1']"
       )
     end
@@ -252,12 +253,12 @@ RSpec.describe Backlogs::WorkPackageCardMenuComponent, type: :component do
                       current_user: fixed_user
                     ))
 
-      singular_group = page.find("ul[role='group'][data-sortable-lists--item-target='thisWorkPackageGroup']")
+      singular_group = page.find("ul[role='group'][data-sortable-lists--item-target='invokerGroup']")
 
       expect(page).to have_css("ul[role='group']", count: 1)
       expect(singular_group).to have_css("#work_package_#{work_package.id}_menu_open_details")
-      expect(page).to have_no_css("[data-sortable-lists--item-target='selectedWorkPackagesGroup']")
-      expect(page).to have_no_css("[data-sortable-lists--item-target='selectedWorkPackagesHeading']")
+      expect(page).to have_no_css("[data-sortable-lists--item-target='batchGroup']")
+      expect(page).to have_no_css("[data-sortable-lists--item-target='batchHeading']")
       expect(page).to have_no_css("[data-sortable-lists--item-target='moveMenu']")
     end
   end

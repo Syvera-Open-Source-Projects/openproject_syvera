@@ -78,10 +78,10 @@ export default class ItemController extends Controller<HTMLElement> implements R
     'destinationItem',
     'moveItem',
     'moveMenu',
-    'thisWorkPackageGroup',
-    'thisWorkPackageHeading',
-    'selectedWorkPackagesGroup',
-    'selectedWorkPackagesHeading',
+    'invokerGroup',
+    'invokerHeading',
+    'batchGroup',
+    'batchHeading',
     'focus',
   ];
 
@@ -120,14 +120,14 @@ export default class ItemController extends Controller<HTMLElement> implements R
   declare readonly moveItemTargets:HTMLElement[];
   declare readonly moveMenuTarget:HTMLElement;
   declare readonly hasMoveMenuTarget:boolean;
-  declare readonly thisWorkPackageGroupTarget:HTMLElement;
-  declare readonly hasThisWorkPackageGroupTarget:boolean;
-  declare readonly thisWorkPackageHeadingTarget:HTMLElement;
-  declare readonly hasThisWorkPackageHeadingTarget:boolean;
-  declare readonly selectedWorkPackagesGroupTarget:HTMLElement;
-  declare readonly hasSelectedWorkPackagesGroupTarget:boolean;
-  declare readonly selectedWorkPackagesHeadingTarget:HTMLElement;
-  declare readonly hasSelectedWorkPackagesHeadingTarget:boolean;
+  declare readonly invokerGroupTarget:HTMLElement;
+  declare readonly hasInvokerGroupTarget:boolean;
+  declare readonly invokerHeadingTarget:HTMLElement;
+  declare readonly hasInvokerHeadingTarget:boolean;
+  declare readonly batchGroupTarget:HTMLElement;
+  declare readonly hasBatchGroupTarget:boolean;
+  declare readonly batchHeadingTarget:HTMLElement;
+  declare readonly hasBatchHeadingTarget:boolean;
   declare readonly focusTarget:HTMLElement;
   declare readonly hasFocusTarget:boolean;
 
@@ -205,19 +205,19 @@ export default class ItemController extends Controller<HTMLElement> implements R
     this.refreshActionAvailability();
   }
 
-  thisWorkPackageGroupTargetConnected():void {
+  invokerGroupTargetConnected():void {
     this.refreshActionAvailability();
   }
 
-  thisWorkPackageHeadingTargetConnected():void {
+  invokerHeadingTargetConnected():void {
     this.refreshActionAvailability();
   }
 
-  selectedWorkPackagesGroupTargetConnected():void {
+  batchGroupTargetConnected():void {
     this.refreshActionAvailability();
   }
 
-  selectedWorkPackagesHeadingTargetConnected():void {
+  batchHeadingTargetConnected():void {
     this.refreshActionAvailability();
   }
 
@@ -672,36 +672,44 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
   private refreshActionGroups(scope:ActionScope, visibleBatchActionCount:number):void {
     const trueBatch = scope.kind === 'batch' && scope.ids.length > 1;
+    const batchActionsVisible = visibleBatchActionCount > 0;
 
-    if (this.hasThisWorkPackageHeadingTarget) {
-      this.thisWorkPackageHeadingTarget.toggleAttribute('hidden', !trueBatch);
+    if (this.hasInvokerHeadingTarget) {
+      this.invokerHeadingTarget.toggleAttribute('hidden', !trueBatch);
     }
 
-    if (this.hasSelectedWorkPackagesHeadingTarget) {
-      this.selectedWorkPackagesHeadingTarget.toggleAttribute(
+    if (this.hasBatchHeadingTarget) {
+      this.batchHeadingTarget.toggleAttribute(
         'hidden',
-        !trueBatch || visibleBatchActionCount === 0,
+        !trueBatch || !batchActionsVisible,
       );
-      if (trueBatch) {
-        this.updateSelectedWorkPackagesHeading(scope.ids.length);
-      }
     }
 
-    if (this.hasSelectedWorkPackagesGroupTarget) {
-      this.selectedWorkPackagesGroupTarget.toggleAttribute(
+    if (this.hasBatchGroupTarget) {
+      this.batchGroupTarget.toggleAttribute(
         'hidden',
         (scope.kind === 'singular' && !isOrderableItem(this.element))
-          || (trueBatch && visibleBatchActionCount === 0),
+          || (trueBatch && !batchActionsVisible),
       );
+    }
+
+    if (this.hasInvokerGroupTarget) {
+      this.projectGroupLabel(this.invokerGroupTarget, trueBatch);
+    }
+    if (this.hasBatchGroupTarget) {
+      this.projectGroupLabel(this.batchGroupTarget, trueBatch && batchActionsVisible);
+    }
+    if (trueBatch) {
+      this.updateBatchHeading(scope.ids.length);
     }
   }
 
-  private updateSelectedWorkPackagesHeading(count:number):void {
-    if (!this.hasSelectedWorkPackagesHeadingTarget || !this.hasSelectedWorkPackagesGroupTarget) {
+  private updateBatchHeading(count:number):void {
+    if (!this.hasBatchHeadingTarget || !this.hasBatchGroupTarget) {
       return;
     }
 
-    const labelledBy = this.selectedWorkPackagesGroupTarget.getAttribute('aria-labelledby')?.trim();
+    const labelledBy = this.batchGroupTarget.getAttribute('aria-labelledby')?.trim();
     if (!labelledBy) {
       return;
     }
@@ -710,15 +718,32 @@ export default class ItemController extends Controller<HTMLElement> implements R
     const title = labelledBy
       .split(/\s+/)
       .map((id) => document.getElementById(id))
-      .find((element) => element && this.selectedWorkPackagesHeadingTarget.contains(element));
+      .find((element) => element && this.batchHeadingTarget.contains(element));
     if (!title) {
       return;
     }
 
-    title.textContent = I18n.t(
-      'js.backlogs.action_menu.selected_work_packages',
-      { count },
-    );
+    const key = this.batchHeadingTarget.dataset.i18nKey;
+    if (!key) {
+      return;
+    }
+
+    title.textContent = I18n.t(key, { count });
+  }
+
+  private projectGroupLabel(group:HTMLElement, labelled:boolean):void {
+    const labelledBy = group.dataset.sortableListsItemLabelledBy
+      ?? group.getAttribute('aria-labelledby');
+
+    if (labelledBy) {
+      group.dataset.sortableListsItemLabelledBy = labelledBy;
+    }
+
+    if (labelled && labelledBy) {
+      group.setAttribute('aria-labelledby', labelledBy);
+    } else {
+      group.removeAttribute('aria-labelledby');
+    }
   }
 
   // Availability goes through the action-menu element's API: disableItem sets the
