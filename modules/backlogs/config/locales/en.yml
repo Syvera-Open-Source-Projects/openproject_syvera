@@ -288,6 +288,9 @@ en:
         no_available_destinations: "There are no available sprints for these work packages."
       move_collection:
         invalid_ids: "The list of work packages to move is invalid."
+        moved_announcement:
+          one: "%{count} work package moved to %{list}, position %{first} of %{total}"
+          other: "%{count} work packages moved to %{list}, positions %{first} through %{last} of %{total}"
         work_packages_not_found: "At least one work package could not be found in this project."
       update_service:
         invalid_target_type: "list_type must be one of: backlog_bucket with a list_id, sprint with a list_id, or inbox without a list_id."
