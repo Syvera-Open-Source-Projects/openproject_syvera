@@ -1571,7 +1571,7 @@ describe('Sortable lists controller', () => {
       selectItem(items[1]);
       selectItem(items[0], { metaKey: true });
 
-      expect(controller.prepareActionMenu(items[1])).toMatchObject({
+      expect(controller.selectForAction(items[1])).toMatchObject({
         kind: 'batch',
         ids: ['1', '2'],
       });
@@ -1585,7 +1585,7 @@ describe('Sortable lists controller', () => {
       selectItem(items[0]);
       selectItem(items[1], { metaKey: true });
 
-      expect(controller.prepareActionMenu(items[2])).toMatchObject({
+      expect(controller.selectForAction(items[2])).toMatchObject({
         kind: 'batch',
         ids: ['3'],
       });
@@ -1599,12 +1599,14 @@ describe('Sortable lists controller', () => {
       const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
       selectItem(items[0]);
       selectItem(items[1], { metaKey: true });
+      announceSpy.mockClear();
 
-      expect(controller.prepareActionMenu(items[2])).toMatchObject({
+      expect(controller.selectForAction(items[2])).toMatchObject({
         kind: 'singular',
         invoker: items[2],
       });
       expect(controller.selectedIds()).toEqual(['1', '2']);
+      expect(announcedMessages()).toEqual([]);
     });
 
     it('returns a prospective one-card scope without changing visible selection while busy', async () => {
@@ -1615,7 +1617,7 @@ describe('Sortable lists controller', () => {
       selectItem(items[1], { metaKey: true });
       root.setAttribute('data-sortable-lists-busy', 'true');
 
-      expect(controller.prepareActionMenu(items[2])).toMatchObject({
+      expect(controller.selectForAction(items[2])).toMatchObject({
         kind: 'batch',
         ids: ['3'],
       });
@@ -1630,8 +1632,8 @@ describe('Sortable lists controller', () => {
       selectItem(items[1], { metaKey: true });
       announceSpy.mockClear();
 
-      const contextualScope = controller.prepareActionMenu(items[2]);
-      const popoverScope = controller.prepareActionMenu(items[2]);
+      const contextualScope = controller.selectForAction(items[2]);
+      const popoverScope = controller.selectForAction(items[2]);
 
       expect(contextualScope).toMatchObject({ kind: 'batch', ids: ['3'] });
       expect(popoverScope).toMatchObject({ kind: 'batch', ids: ['3'] });

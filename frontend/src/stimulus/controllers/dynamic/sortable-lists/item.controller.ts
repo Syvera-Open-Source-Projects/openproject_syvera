@@ -147,7 +147,11 @@ export default class ItemController extends Controller<HTMLElement> implements R
     // shifted siblings meanwhile. Read newState by duck typing rather than
     // `instanceof ToggleEvent` so a browser without the ToggleEvent global
     // cannot throw.
-    if ((event as ToggleEvent).newState === 'open') {
+    if (
+      (event as ToggleEvent).newState === 'open'
+      && this.hasMenuElement
+      && event.target === this.menuElement.popoverElement
+    ) {
       this.refreshActionAvailability();
     }
   };
@@ -580,7 +584,7 @@ export default class ItemController extends Controller<HTMLElement> implements R
   }
 
   private prepareActionMenu():void {
-    const scope = this.root?.prepareActionMenu(this.element);
+    const scope = this.root?.selectForAction(this.element);
     if (scope) {
       this.refreshActionAvailability(scope);
     }

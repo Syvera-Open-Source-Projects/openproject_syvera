@@ -107,7 +107,6 @@ describe('Sortable lists item controller', () => {
       busy,
       actionScopeFor: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       selectForAction: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
-      prepareActionMenu: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       availableDestinations: vi.fn(() => []),
       moveToDestination: vi.fn(),
       moveInDirection: vi.fn(),
@@ -980,7 +979,6 @@ describe('Sortable lists item controller', () => {
         busy: false,
         actionScopeFor: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
         selectForAction: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
-        prepareActionMenu: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
         availableDestinations: vi.fn(() => []),
         moveToDestination: vi.fn(),
         moveInDirection: vi.fn(),
@@ -1299,7 +1297,6 @@ describe('Sortable lists item controller', () => {
       busy: false,
       actionScopeFor: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       selectForAction: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
-      prepareActionMenu: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       availableDestinations: vi.fn(() => []),
       moveToDestination: vi.fn(),
       moveAvailability: () => availability,
@@ -1334,15 +1331,21 @@ describe('Sortable lists item controller', () => {
       el.querySelector<HTMLElement>(`[data-sortable-lists--item-target="${name}"]`)!
     );
 
-    async function mountActionMenuInvocationFixture() {
-      const { el } = renderItemWithMenu(1);
-      const card = document.createElement('article');
-      card.setAttribute('data-sortable-lists--item-target', 'focus');
+    const attachMenuPopover = (el:HTMLElement):HTMLElement => {
       const actionMenu = el.querySelector<HTMLElement>('action-menu')!;
       const popover = document.createElement('anchored-position');
       popover.setAttribute('popover', '');
       Object.assign(actionMenu, { popoverElement: popover });
       actionMenu.append(popover);
+      return popover;
+    };
+
+    async function mountActionMenuInvocationFixture() {
+      const { el } = renderItemWithMenu(1);
+      const card = document.createElement('article');
+      card.setAttribute('data-sortable-lists--item-target', 'focus');
+      const actionMenu = el.querySelector<HTMLElement>('action-menu')!;
+      const popover = attachMenuPopover(el);
       card.append(actionMenu);
       el.append(card);
       destinationFor(el, [{ type: 'inbox', id: null }]);
@@ -1351,7 +1354,8 @@ describe('Sortable lists item controller', () => {
       const controller = await mountItemController(el);
       const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1'] };
       const sequence:string[] = [];
-      const prepareActionMenu = vi.fn(() => {
+      const actionScopeFor = vi.fn(() => scope);
+      const selectForAction = vi.fn(() => {
         sequence.push('prepare');
         return scope;
       });
@@ -1361,13 +1365,15 @@ describe('Sortable lists item controller', () => {
       });
       const root = {
         ...stubRoot(el, { isFirst: true, isLast: true }),
-        prepareActionMenu,
+        actionScopeFor,
+        selectForAction,
         availableDestinations,
       };
       controller.connectRoot(root);
       await menuCtx!.nextFrame();
       sequence.length = 0;
-      prepareActionMenu.mockClear();
+      actionScopeFor.mockClear();
+      selectForAction.mockClear();
       availableDestinations.mockClear();
 
       return {
@@ -1378,7 +1384,8 @@ describe('Sortable lists item controller', () => {
         root,
         scope,
         sequence,
-        prepareActionMenu,
+        actionScopeFor,
+        selectForAction,
         availableDestinations,
       };
     }
@@ -1389,7 +1396,7 @@ describe('Sortable lists item controller', () => {
       ['Shift+F10', 'keyboard'],
     ])('settles action scope before projecting a %s invocation', async (_label, origin) => {
       const {
-        el, card, scope, sequence, prepareActionMenu, availableDestinations,
+        el, card, scope, sequence, selectForAction, availableDestinations,
       } = await mountActionMenuInvocationFixture();
 
       card.dispatchEvent(new CustomEvent('contextual-action-menu:beforeOpen', {
@@ -1398,7 +1405,7 @@ describe('Sortable lists item controller', () => {
         detail: { origin },
       }));
 
-      expect(prepareActionMenu).toHaveBeenCalledWith(el);
+      expect(selectForAction).toHaveBeenCalledWith(el);
       expect(availableDestinations).toHaveBeenCalledWith(scope, [{ type: 'inbox', id: null }]);
       expect(sequence).toEqual(['prepare', 'project:1']);
     });
@@ -1408,7 +1415,7 @@ describe('Sortable lists item controller', () => {
       'More button keyboard invocation',
     ])('settles action scope before projecting a %s', async () => {
       const {
-        el, popover, scope, sequence, prepareActionMenu, availableDestinations,
+        el, popover, scope, sequence, selectForAction, availableDestinations,
       } = await mountActionMenuInvocationFixture();
 
       popover.dispatchEvent(new ToggleEvent('beforetoggle', {
@@ -1416,13 +1423,13 @@ describe('Sortable lists item controller', () => {
         newState: 'open',
       }));
 
-      expect(prepareActionMenu).toHaveBeenCalledWith(el);
+      expect(selectForAction).toHaveBeenCalledWith(el);
       expect(availableDestinations).toHaveBeenCalledWith(scope, [{ type: 'inbox', id: null }]);
       expect(sequence).toEqual(['prepare', 'project:1']);
     });
 
     it('ignores closing and unrelated popover pre-toggle events', async () => {
-      const { card, popover, prepareActionMenu } = await mountActionMenuInvocationFixture();
+      const { card, popover, selectForAction } = await mountActionMenuInvocationFixture();
       const tooltip = document.createElement('div');
       tooltip.setAttribute('popover', '');
       card.append(tooltip);
@@ -1436,12 +1443,12 @@ describe('Sortable lists item controller', () => {
         newState: 'open',
       }));
 
-      expect(prepareActionMenu).not.toHaveBeenCalled();
+      expect(selectForAction).not.toHaveBeenCalled();
     });
 
     it('does nothing when a pre-open event arrives after its root disconnects', async () => {
       const {
-        controller, card, popover, prepareActionMenu,
+        controller, card, popover, selectForAction,
       } = await mountActionMenuInvocationFixture();
       controller.disconnectRoot();
 
@@ -1455,12 +1462,12 @@ describe('Sortable lists item controller', () => {
         newState: 'open',
       }));
 
-      expect(prepareActionMenu).not.toHaveBeenCalled();
+      expect(selectForAction).not.toHaveBeenCalled();
     });
 
     it('projects one stable scope when contextual and popover pre-open events both arrive', async () => {
       const {
-        card, popover, scope, prepareActionMenu, availableDestinations,
+        card, popover, scope, selectForAction, availableDestinations,
       } = await mountActionMenuInvocationFixture();
 
       card.dispatchEvent(new CustomEvent('contextual-action-menu:beforeOpen', {
@@ -1473,9 +1480,36 @@ describe('Sortable lists item controller', () => {
         newState: 'open',
       }));
 
-      expect(prepareActionMenu).toHaveBeenCalledTimes(2);
+      expect(selectForAction).toHaveBeenCalledTimes(2);
       expect(availableDestinations).toHaveBeenCalledTimes(2);
       expect(availableDestinations.mock.calls.map(([projectedScope]) => projectedScope)).toEqual([scope, scope]);
+    });
+
+    it('late-refreshes only for the card menu popover, not a nested submenu', async () => {
+      const {
+        popover, actionScopeFor, availableDestinations,
+      } = await mountActionMenuInvocationFixture();
+      const nestedPopover = document.createElement('anchored-position');
+      nestedPopover.setAttribute('popover', '');
+      popover.append(nestedPopover);
+
+      popover.dispatchEvent(new ToggleEvent('toggle', {
+        oldState: 'closed',
+        newState: 'open',
+      }));
+
+      expect(actionScopeFor).toHaveBeenCalledTimes(1);
+      expect(availableDestinations).toHaveBeenCalledTimes(1);
+      actionScopeFor.mockClear();
+      availableDestinations.mockClear();
+
+      nestedPopover.dispatchEvent(new ToggleEvent('toggle', {
+        oldState: 'closed',
+        newState: 'open',
+      }));
+
+      expect(actionScopeFor).not.toHaveBeenCalled();
+      expect(availableDestinations).not.toHaveBeenCalled();
     });
 
     it('handles a contextual pre-open from the item itself when no focus target exists', async () => {
@@ -1483,10 +1517,10 @@ describe('Sortable lists item controller', () => {
       document.body.appendChild(el);
       const controller = await mountItemController(el);
       const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1'] };
-      const prepareActionMenu = vi.fn(() => scope);
+      const selectForAction = vi.fn(() => scope);
       controller.connectRoot({
         ...stubRoot(el, { isFirst: true, isLast: true }),
-        prepareActionMenu,
+        selectForAction,
       });
 
       el.dispatchEvent(new CustomEvent('contextual-action-menu:beforeOpen', {
@@ -1495,7 +1529,7 @@ describe('Sortable lists item controller', () => {
         detail: { origin: 'pointer' },
       }));
 
-      expect(prepareActionMenu).toHaveBeenCalledWith(el);
+      expect(selectForAction).toHaveBeenCalledWith(el);
     });
 
     it('hides up/top for a first item and shows the rest', async () => {
@@ -1600,6 +1634,7 @@ describe('Sortable lists item controller', () => {
         `<div hidden data-i18n-key="js.backlogs.action_menu.selected_work_packages" data-sortable-lists--item-target="batchHeading"><div id="${batchHeadingId}">0 selected work packages</div></div>`,
         `<ul role="group" aria-labelledby="${batchHeadingId}" data-sortable-lists--item-target="batchGroup"></ul>`,
       ].join(''));
+      const popover = attachMenuPopover(el);
       document.body.appendChild(el);
       const controller = await mountItemController(el);
       const oneCard:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1'] };
@@ -1608,8 +1643,7 @@ describe('Sortable lists item controller', () => {
       const { root, actionScopeFor } = stubMenuRoot(el, { isFirst: false, isLast: false });
       actionScopeFor.mockImplementation(() => scope);
       controller.connectRoot(root);
-      const menuElement = el.querySelector('action-menu')!;
-      menuElement.dispatchEvent(new ToggleEvent('toggle', {
+      popover.dispatchEvent(new ToggleEvent('toggle', {
         newState: 'open',
         oldState: 'closed',
       }));
@@ -1629,7 +1663,7 @@ describe('Sortable lists item controller', () => {
       expect(batchGroup).toHaveAccessibleName('');
 
       scope = trueBatch;
-      menuElement.dispatchEvent(new ToggleEvent('toggle', {
+      popover.dispatchEvent(new ToggleEvent('toggle', {
         newState: 'open',
         oldState: 'closed',
       }));
@@ -1732,6 +1766,7 @@ describe('Sortable lists item controller', () => {
 
     it('recomputes selected multi-card and prospective one-card scopes whenever the menu opens', async () => {
       const { el, menu } = renderItemWithMenu(1);
+      const popover = attachMenuPopover(el);
       document.body.appendChild(el);
       const controller = await mountItemController(el);
       const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
@@ -1759,9 +1794,8 @@ describe('Sortable lists item controller', () => {
       menu.showItem.mockClear();
       activeScope = prospectiveScope;
 
-      const menuElement = el.querySelector('action-menu')!;
       const toggle = new ToggleEvent('toggle', { newState: 'open', oldState: 'closed' });
-      menuElement.dispatchEvent(toggle);
+      popover.dispatchEvent(toggle);
 
       expect(actionScopeFor).toHaveBeenLastCalledWith(el);
       expect(availableDestinations).toHaveBeenCalledWith(prospectiveScope, [{ type: 'sprint', id: '1' }]);
@@ -2153,7 +2187,6 @@ describe('Sortable lists item controller', () => {
         busy: false,
         actionScopeFor: vi.fn((actionItem:HTMLElement):ActionScope => ({ kind: 'singular', invoker: actionItem, items: [], ids: [] })),
         selectForAction: vi.fn((actionItem:HTMLElement):ActionScope => ({ kind: 'singular', invoker: actionItem, items: [], ids: [] })),
-        prepareActionMenu: vi.fn((actionItem:HTMLElement):ActionScope => ({ kind: 'singular', invoker: actionItem, items: [], ids: [] })),
         availableDestinations: vi.fn(() => []),
         moveToDestination: vi.fn(),
         moveInDirection: vi.fn(),
@@ -2186,7 +2219,6 @@ describe('Sortable lists item controller', () => {
         busy: false,
         actionScopeFor: vi.fn((actionItem:HTMLElement):ActionScope => ({ kind: 'singular', invoker: actionItem, items: [], ids: [] })),
         selectForAction: vi.fn((actionItem:HTMLElement):ActionScope => ({ kind: 'singular', invoker: actionItem, items: [], ids: [] })),
-        prepareActionMenu: vi.fn((actionItem:HTMLElement):ActionScope => ({ kind: 'singular', invoker: actionItem, items: [], ids: [] })),
         availableDestinations: vi.fn(() => []),
         moveToDestination: vi.fn(),
         moveInDirection: vi.fn(),
