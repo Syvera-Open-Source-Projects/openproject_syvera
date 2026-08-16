@@ -2176,19 +2176,17 @@ describe('Sortable lists controller', () => {
     expect(items.some(isSelected)).toBe(false);
   });
 
-  // Escape only clears local selection state, which nothing an in-flight
-  // move depends on, so it must not be swallowed by the same busy gate that
-  // holds back the DOM-mutating gestures elsewhere in this handler.
-  it('clears the batch on Escape even during a busy move', async () => {
+  it('preserves the batch and consumes Escape during a busy move', async () => {
     const { root, items } = renderSelectableRoot();
     await ctx.nextFrame();
     click(items[0]);
     items[0].focus();
     root.setAttribute('data-sortable-lists-busy', 'true');
 
-    keydown(items[0], 'Escape');
+    const event = keydown(items[0], 'Escape');
 
-    expect(items.some(isSelected)).toBe(false);
+    expect(items.filter(isSelected)).toEqual([items[0]]);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   // Escape must stay a no-op (and unconsumed) with nothing to clear, so it
