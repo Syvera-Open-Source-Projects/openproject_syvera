@@ -1213,6 +1213,20 @@ describe('Sortable lists item controller', () => {
       isItemHidden:ReturnType<typeof vi.fn>;
     }
 
+    function actionGroupsMarkup(idNumber:number, includeSelectedGroup = true):string {
+      const thisHeadingId = `this-work-package-heading-${idNumber}`;
+      const selectedHeadingId = `selected-work-packages-heading-${idNumber}`;
+
+      return [
+        `<div hidden data-sortable-lists--item-target="thisWorkPackageHeading"><div id="${thisHeadingId}">This work package</div></div>`,
+        `<ul aria-labelledby="${thisHeadingId}" data-sortable-lists--item-target="thisWorkPackageGroup"><li>Open details</li></ul>`,
+        ...(includeSelectedGroup ? [
+          `<div hidden data-sortable-lists--item-target="selectedWorkPackagesHeading"><div id="${selectedHeadingId}">0 selected work packages</div></div>`,
+          `<ul aria-labelledby="${selectedHeadingId}" data-sortable-lists--item-target="selectedWorkPackagesGroup"></ul>`,
+        ] : []),
+      ].join('');
+    }
+
     function renderItemWithMenu(
       idNumber:number,
       actionGroups:false|true|'singular' = false,
@@ -1224,14 +1238,7 @@ describe('Sortable lists item controller', () => {
 
       const menuElement = document.createElement('action-menu');
       if (actionGroups) {
-        menuElement.innerHTML = [
-          '<div hidden data-sortable-lists--item-target="thisWorkPackageHeading">This work package</div>',
-          '<ul data-sortable-lists--item-target="thisWorkPackageGroup"><li>Open details</li></ul>',
-          ...(actionGroups === true ? [
-            '<div hidden data-sortable-lists--item-target="selectedWorkPackagesHeading">0 selected work packages</div>',
-            '<ul data-sortable-lists--item-target="selectedWorkPackagesGroup"></ul>',
-          ] : []),
-        ].join('');
+        menuElement.innerHTML = actionGroupsMarkup(idNumber, actionGroups === true);
       }
       const parent = document.createElement('li');
       parent.setAttribute('data-sortable-lists--item-target', 'moveMenu');
@@ -1559,13 +1566,21 @@ describe('Sortable lists item controller', () => {
       availableDestinations.mockImplementation((_scope, candidates) => candidates);
       controller.connectRoot(root);
 
+      const selectedHeading = actionTarget(el, 'selectedWorkPackagesHeading');
+      const selectedGroup = actionTarget(el, 'selectedWorkPackagesGroup');
+      const selectedTitleId = selectedGroup.getAttribute('aria-labelledby')!;
+      const selectedTitle = document.getElementById(selectedTitleId)!;
+
       destinationFor(el, [{ type: 'sprint', id: '1' }]);
       await menuCtx!.nextFrame();
 
       expect(actionTarget(el, 'thisWorkPackageHeading')).not.toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).not.toHaveAttribute('hidden');
-      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveTextContent('3 selected work packages');
-      expect(actionTarget(el, 'selectedWorkPackagesGroup')).not.toHaveAttribute('hidden');
+      expect(selectedHeading).not.toHaveAttribute('hidden');
+      expect(selectedGroup).not.toHaveAttribute('hidden');
+      expect(selectedGroup).toHaveAttribute('aria-labelledby', selectedTitleId);
+      expect(document.getElementById(selectedTitleId)).toBe(selectedTitle);
+      expect(selectedHeading).toContainElement(selectedTitle);
+      expect(selectedTitle).toHaveTextContent('3 selected work packages');
     });
 
     it('keeps the selected-work-packages group visible with only a destination action', async () => {
@@ -1619,12 +1634,7 @@ describe('Sortable lists item controller', () => {
       controller.connectRoot(root);
 
       const actionMenu = el.querySelector('action-menu')!;
-      actionMenu.insertAdjacentHTML('afterbegin', [
-        '<div hidden data-sortable-lists--item-target="thisWorkPackageHeading">This work package</div>',
-        '<ul data-sortable-lists--item-target="thisWorkPackageGroup"><li>Open details</li></ul>',
-        '<div hidden data-sortable-lists--item-target="selectedWorkPackagesHeading">0 selected work packages</div>',
-        '<ul data-sortable-lists--item-target="selectedWorkPackagesGroup"></ul>',
-      ].join(''));
+      actionMenu.insertAdjacentHTML('afterbegin', actionGroupsMarkup(1));
       destinationFor(el, [{ type: 'inbox', id: null }]);
       await menuCtx!.nextFrame();
 
@@ -1720,6 +1730,7 @@ describe('Sortable lists item controller', () => {
       for (const direction of ['top', 'up', 'down', 'bottom']) {
         expect(menu.hideItem).toHaveBeenCalledWith(liFor(el, direction));
       }
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveAttribute('hidden');
       expect(actionTarget(el, 'selectedWorkPackagesGroup')).toHaveAttribute('hidden');
     });
 

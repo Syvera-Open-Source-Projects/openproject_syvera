@@ -663,12 +663,12 @@ export default class ItemController extends Controller<HTMLElement> implements R
     }
 
     if (this.hasSelectedWorkPackagesHeadingTarget) {
-      this.selectedWorkPackagesHeadingTarget.toggleAttribute('hidden', !trueBatch);
+      this.selectedWorkPackagesHeadingTarget.toggleAttribute(
+        'hidden',
+        !trueBatch || visibleBatchActionCount === 0,
+      );
       if (trueBatch) {
-        this.selectedWorkPackagesHeadingTarget.textContent = I18n.t(
-          'js.backlogs.action_menu.selected_work_packages',
-          { count: scope.ids.length },
-        );
+        this.updateSelectedWorkPackagesHeading(scope.ids.length);
       }
     }
 
@@ -678,6 +678,31 @@ export default class ItemController extends Controller<HTMLElement> implements R
         trueBatch && visibleBatchActionCount === 0,
       );
     }
+  }
+
+  private updateSelectedWorkPackagesHeading(count:number):void {
+    if (!this.hasSelectedWorkPackagesHeadingTarget || !this.hasSelectedWorkPackagesGroupTarget) {
+      return;
+    }
+
+    const labelledBy = this.selectedWorkPackagesGroupTarget.getAttribute('aria-labelledby')?.trim();
+    if (!labelledBy) {
+      return;
+    }
+
+    const document = this.element.ownerDocument;
+    const title = labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id))
+      .find((element) => element && this.selectedWorkPackagesHeadingTarget.contains(element));
+    if (!title) {
+      return;
+    }
+
+    title.textContent = I18n.t(
+      'js.backlogs.action_menu.selected_work_packages',
+      { count },
+    );
   }
 
   // Availability goes through the action-menu element's API: disableItem sets the
