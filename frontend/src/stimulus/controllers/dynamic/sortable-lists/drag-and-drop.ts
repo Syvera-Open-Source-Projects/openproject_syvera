@@ -100,6 +100,7 @@ export interface SortableListsRoot {
   readonly busy:boolean;
   actionScopeFor(itemElement:HTMLElement):ActionScope;
   selectForAction(itemElement:HTMLElement):ActionScope;
+  prepareActionMenu(itemElement:HTMLElement):ActionScope;
   availableDestinations(scope:ActionScope, candidates:DestinationIdentity[]):DestinationIdentity[];
   moveToDestination(itemElement:HTMLElement, target:DestinationIdentity):void;
   moveInDirection(itemElement:HTMLElement, direction:MoveDirection):void;

@@ -73,6 +73,7 @@ describe('Sortable lists scrollable controller', () => {
       busy: false,
       actionScopeFor: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       selectForAction: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
+      prepareActionMenu: vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] })),
       availableDestinations: vi.fn(() => []),
       moveToDestination: vi.fn(),
       moveInDirection: vi.fn(),

@@ -1559,6 +1559,89 @@ describe('Sortable lists controller', () => {
     ])).toEqual([{ type: 'sprint', id: '1' }]);
   });
 
+  describe('action menu invocation scope', () => {
+    const selectItem = (item:HTMLElement, init:MouseEventInit = {}):void => {
+      item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
+    };
+
+    it('preserves a selected eligible invoker and returns the live ordered batch', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      selectItem(items[1]);
+      selectItem(items[0], { metaKey: true });
+
+      expect(controller.prepareActionMenu(items[1])).toMatchObject({
+        kind: 'batch',
+        ids: ['1', '2'],
+      });
+      expect(controller.selectedIds()).toEqual(['1', '2']);
+    });
+
+    it('replaces an unrelated selection when an unselected eligible invoker opens its menu', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      selectItem(items[0]);
+      selectItem(items[1], { metaKey: true });
+
+      expect(controller.prepareActionMenu(items[2])).toMatchObject({
+        kind: 'batch',
+        ids: ['3'],
+      });
+      expect(controller.selectedIds()).toEqual(['3']);
+    });
+
+    it('preserves the current selection when a fixed invoker opens its singular menu', async () => {
+      const { root, items } = renderSelectableRoot();
+      items[2].setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      selectItem(items[0]);
+      selectItem(items[1], { metaKey: true });
+
+      expect(controller.prepareActionMenu(items[2])).toMatchObject({
+        kind: 'singular',
+        invoker: items[2],
+      });
+      expect(controller.selectedIds()).toEqual(['1', '2']);
+    });
+
+    it('returns a prospective one-card scope without changing visible selection while busy', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      selectItem(items[0]);
+      selectItem(items[1], { metaKey: true });
+      root.setAttribute('data-sortable-lists-busy', 'true');
+
+      expect(controller.prepareActionMenu(items[2])).toMatchObject({
+        kind: 'batch',
+        ids: ['3'],
+      });
+      expect(controller.selectedIds()).toEqual(['1', '2']);
+    });
+
+    it('settles duplicate pre-open delivery once without repeating its selection announcement', async () => {
+      const { root, items } = renderSelectableRoot();
+      await ctx.nextFrame();
+      const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+      selectItem(items[0]);
+      selectItem(items[1], { metaKey: true });
+      announceSpy.mockClear();
+
+      const contextualScope = controller.prepareActionMenu(items[2]);
+      const popoverScope = controller.prepareActionMenu(items[2]);
+
+      expect(contextualScope).toMatchObject({ kind: 'batch', ids: ['3'] });
+      expect(popoverScope).toMatchObject({ kind: 'batch', ids: ['3'] });
+      expect(controller.selectedIds()).toEqual(['3']);
+      expect(announcedMessages()).toEqual([
+        ['1 item selected.', { politeness: 'polite' }],
+      ]);
+    });
+  });
+
   describe('direct destination moves', () => {
     const destination = { type: 'inbox', id: null };
 

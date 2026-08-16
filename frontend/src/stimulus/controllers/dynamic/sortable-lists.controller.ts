@@ -229,6 +229,10 @@ export default class SortableListsController extends Controller<HTMLElement> imp
       ?? { kind: 'singular', invoker: itemElement, items: [], ids: [] };
   }
 
+  prepareActionMenu(itemElement:HTMLElement):ActionScope {
+    return this.selectForAction(itemElement);
+  }
+
   // Consumer-owned non-optimistic forms do not call performMove, so their
   // successful move event is the shared boundary at which the live batch is
   // cleared. Failed requests emit no completion event and keep the selection.
