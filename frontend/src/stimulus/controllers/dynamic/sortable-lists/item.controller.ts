@@ -594,7 +594,7 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
     const scope = preparedScope ?? root.actionScopeFor(this.element);
     const visibleDestinationCount = this.refreshDestinationAvailability(root, scope);
-    const visibleMoveMenuCount = this.refreshMoveMenuAvailability(root);
+    const visibleMoveMenuCount = this.refreshMoveMenuAvailability(root, scope);
 
     this.refreshActionGroups(scope, visibleDestinationCount + visibleMoveMenuCount);
   }
@@ -604,7 +604,12 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
     for (const item of this.destinationItemTargets) {
       const candidates = this.destinationCandidates(item);
-      this.setAvailability(item, candidates.length > 0 && root.availableDestinations(scope, candidates).length > 0);
+      this.setAvailability(
+        item,
+        !(scope.kind === 'singular' && !isOrderableItem(this.element))
+          && candidates.length > 0
+          && root.availableDestinations(scope, candidates).length > 0,
+      );
       if (!item.hasAttribute('hidden')) {
         visible += 1;
       }
@@ -627,7 +632,17 @@ export default class ItemController extends Controller<HTMLElement> implements R
     }
   }
 
-  private refreshMoveMenuAvailability(root:SortableListsRoot):number {
+  private refreshMoveMenuAvailability(root:SortableListsRoot, scope:ActionScope):number {
+    if (scope.kind === 'singular' && !isOrderableItem(this.element)) {
+      for (const item of this.moveItemTargets) {
+        this.setAvailability(item, false);
+      }
+      if (this.hasMoveMenuTarget) {
+        this.setAvailability(this.moveMenuTarget, false);
+      }
+      return 0;
+    }
+
     // Null availability means the item is not in a list yet; leave the menu
     // alone until the outlet wiring settles.
     const availability = root.moveAvailability(this.element);
@@ -675,7 +690,8 @@ export default class ItemController extends Controller<HTMLElement> implements R
     if (this.hasSelectedWorkPackagesGroupTarget) {
       this.selectedWorkPackagesGroupTarget.toggleAttribute(
         'hidden',
-        trueBatch && visibleBatchActionCount === 0,
+        (scope.kind === 'singular' && !isOrderableItem(this.element))
+          || (trueBatch && visibleBatchActionCount === 0),
       );
     }
   }

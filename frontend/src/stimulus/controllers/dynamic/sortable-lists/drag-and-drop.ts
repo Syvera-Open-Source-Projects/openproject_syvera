@@ -92,9 +92,10 @@ export interface SortableListData extends Record<string|symbol, unknown> {
 // controllers via outlet callbacks, so children read shared state through a
 // typed reference instead of walking the DOM.
 //
-// Selection is deliberately absent: no child branches on whether the root
-// has it, and it now lives behind SelectionOrchestrator rather than being
-// root state children could read.
+// The selection model remains encapsulated by SelectionOrchestrator. Children
+// cannot read or mutate membership directly; the root exposes only the
+// operation-specific action scopes, availability and frozen drag batch they
+// need through this port.
 export interface SortableListsRoot {
   readonly element:HTMLElement;
   readonly busy:boolean;

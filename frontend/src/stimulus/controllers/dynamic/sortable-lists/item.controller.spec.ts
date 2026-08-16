@@ -1308,10 +1308,26 @@ describe('Sortable lists item controller', () => {
 
     function stubMenuRoot(el:HTMLElement, position:{ isFirst:boolean; isLast:boolean }) {
       const actionScopeFor = vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] }));
+      const selectForAction = vi.fn((item:HTMLElement):ActionScope => ({ kind: 'singular', invoker: item, items: [], ids: [] }));
       const availableDestinations = vi.fn((_scope:ActionScope, _candidates:DestinationIdentity[]):DestinationIdentity[] => []);
-      const root = { ...stubRoot(el, position), actionScopeFor, availableDestinations };
+      const moveToDestination = vi.fn();
+      const moveInDirection = vi.fn();
+      const root = {
+        ...stubRoot(el, position, moveInDirection),
+        actionScopeFor,
+        selectForAction,
+        availableDestinations,
+        moveToDestination,
+      };
 
-      return { root, actionScopeFor, availableDestinations };
+      return {
+        root,
+        actionScopeFor,
+        selectForAction,
+        availableDestinations,
+        moveToDestination,
+        moveInDirection,
+      };
     }
 
     const actionTarget = (el:HTMLElement, name:string) => (
@@ -1767,6 +1783,46 @@ describe('Sortable lists item controller', () => {
       expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
       expect(el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesGroup"]')).toBeNull();
       expect(el.querySelector('[data-sortable-lists--item-target="selectedWorkPackagesHeading"]')).toBeNull();
+    });
+
+    it('hides a stale batch action skeleton for a fixed singular invoker', async () => {
+      const { el } = renderItemWithMenu(1, true);
+      el.setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const {
+        root,
+        actionScopeFor,
+        selectForAction,
+        availableDestinations,
+        moveToDestination,
+        moveInDirection,
+      } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      const scope:ActionScope = { kind: 'singular', invoker: el, items: [], ids: [] };
+      actionScopeFor.mockReturnValue(scope);
+      // Keep the collaborators deliberately permissive: the item controller
+      // must project the already-settled singular scope, not let stale batch
+      // markup look actionable while the root's defences would reject it.
+      availableDestinations.mockImplementation((_scope, candidates) => candidates);
+      controller.connectRoot(root);
+
+      const destination = destinationFor(el, [{ type: 'sprint', id: '1' }]);
+      await menuCtx!.nextFrame();
+
+      expect(actionTarget(el, 'thisWorkPackageHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'selectedWorkPackagesGroup')).toHaveAttribute('hidden');
+      expect(destination).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'moveMenu')).toHaveAttribute('hidden');
+
+      liFor(el, 'down').click();
+      const destinationEvent = new Event('click') as ActionEvent;
+      Object.defineProperty(destinationEvent, 'currentTarget', { value: destination });
+      controller.moveToDestination(destinationEvent);
+
+      expect(moveInDirection).not.toHaveBeenCalled();
+      expect(moveToDestination).not.toHaveBeenCalled();
+      expect(selectForAction).not.toHaveBeenCalled();
     });
 
     it.each([

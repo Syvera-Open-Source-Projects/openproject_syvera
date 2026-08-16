@@ -608,6 +608,20 @@ describe('SelectionOrchestrator', () => {
       expect(fixedScope).toEqual({ kind: 'singular', invoker: fixedItem, items: [], ids: [] });
       expect(orchestrator.selectedIds()).toEqual(['1', '2']);
     });
+
+    it('reports a fixed action invoker without changing the selection anchor', () => {
+      const orchestrator = new SelectionOrchestrator(hostFor(root));
+      const firstItem = item('1');
+      const secondItem = item('2');
+      const fixedItem = item('3');
+
+      fixedItem.setAttribute('data-sortable-lists--item-mobility-value', 'fixed');
+      orchestrator.handleClick(clickOn(firstItem));
+      orchestrator.selectForAction(fixedItem);
+      orchestrator.handleClick(clickOn(secondItem, { shiftKey: true }));
+
+      expect(orchestrator.selectedIds()).toEqual(['1', '2']);
+    });
   });
 
   describe('clearAfterMove', () => {
