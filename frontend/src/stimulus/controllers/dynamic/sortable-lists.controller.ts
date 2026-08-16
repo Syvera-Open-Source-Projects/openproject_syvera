@@ -50,8 +50,9 @@ import {
   captureRowPositions,
   isOrderableItem,
   reorderRows,
-  resolveDirectionalPreviousItemId,
+  resolveBlockMove,
   resolveBlockMoveAvailability,
+  resolveDirectionalPreviousItemId,
   resolveItemId,
   resolveItemLabel,
   resolveItemPosition,
@@ -460,6 +461,38 @@ export default class SortableListsController extends Controller<HTMLElement> imp
       return;
     }
 
+    if (this.selection && this.hasCollectionMoveUrlValue) {
+      const scope = this.selectForAction(itemElement);
+      if (scope.kind === 'singular') {
+        return;
+      }
+
+      const list = this.ownerListOf(itemElement);
+      if (!list) {
+        return;
+      }
+
+      const resolution = resolveBlockMove({
+        itemElements: scope.items,
+        direction,
+        rowsContainer: list.rowsContainer,
+      });
+      const moveUrl = this.resolveCollectionMoveUrl();
+      if (!resolution.available || !moveUrl) {
+        return;
+      }
+
+      void this.performMove({
+        rows: resolution.rows,
+        itemIds: scope.ids,
+        rowsContainer: list.rowsContainer,
+        listData: list.listData,
+        previousItemId: resolution.previousItemId,
+        moveUrl,
+      });
+      return;
+    }
+
     const list = this.ownerListOf(itemElement);
     if (!list) {
       return;
@@ -650,7 +683,7 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   // Optimistically reorder a row or a frozen batch of rows, persist the
   // move, and roll the block back (with a FLIP animation and an error toast)
   // if the server rejects it. Shared by drag drops (single or batch) and
-  // programmatic menu moves (always single, itemIds null).
+  // programmatic menu moves (single or selection-backed batch).
   private async performMove({
     rows,
     itemIds,
