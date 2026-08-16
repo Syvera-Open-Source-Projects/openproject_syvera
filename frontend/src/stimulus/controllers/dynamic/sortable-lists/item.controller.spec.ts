@@ -1572,6 +1572,24 @@ describe('Sortable lists item controller', () => {
       expect(actionTarget(el, 'moveMenu')).not.toHaveAttribute('hidden');
     });
 
+    it('hides the batch group for a one-card scope with no executable actions', async () => {
+      const { el } = renderItemWithMenu(1, true);
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1'] };
+      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: true, isLast: true });
+      actionScopeFor.mockReturnValue(scope);
+      availableDestinations.mockReturnValue([]);
+      root.moveAvailability = () => ({ top: false, up: false, down: false, bottom: false });
+      controller.connectRoot(root);
+
+      destinationFor(el, [{ type: 'sprint', id: '1' }]);
+      await menuCtx!.nextFrame();
+
+      expect(actionTarget(el, 'batchHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).toHaveAttribute('hidden');
+    });
+
     it('projects generic group labels across one-card and true-batch scopes', async () => {
       const { el } = renderItemWithMenu(1);
       const invokerHeadingId = 'invoker-heading-1';
@@ -1798,6 +1816,26 @@ describe('Sortable lists item controller', () => {
       for (const direction of ['top', 'up', 'down', 'bottom']) {
         expect(menu.hideItem).toHaveBeenCalledWith(liFor(el, direction));
       }
+      expect(actionTarget(el, 'batchHeading')).toHaveAttribute('hidden');
+      expect(actionTarget(el, 'batchGroup')).toHaveAttribute('hidden');
+    });
+
+    it('hides an all-unavailable true-batch group in disable mode', async () => {
+      const { el, menu } = renderItemWithMenu(1, true);
+      el.setAttribute('data-sortable-lists--item-hide-unavailable-value', 'false');
+      document.body.appendChild(el);
+      const controller = await mountItemController(el);
+      const scope:ActionScope = { kind: 'batch', invoker: el, items: [el], ids: ['1', '3'] };
+      const { root, actionScopeFor, availableDestinations } = stubMenuRoot(el, { isFirst: false, isLast: false });
+      actionScopeFor.mockReturnValue(scope);
+      availableDestinations.mockReturnValue([]);
+      root.moveAvailability = () => ({ top: false, up: false, down: false, bottom: false });
+      controller.connectRoot(root);
+
+      const moveToSprint = destinationFor(el, [{ type: 'sprint', id: '1' }]);
+      await menuCtx!.nextFrame();
+
+      expect(menu.disableItem).toHaveBeenCalledWith(moveToSprint);
       expect(actionTarget(el, 'batchHeading')).toHaveAttribute('hidden');
       expect(actionTarget(el, 'batchGroup')).toHaveAttribute('hidden');
     });

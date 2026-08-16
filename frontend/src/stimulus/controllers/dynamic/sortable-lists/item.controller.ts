@@ -604,13 +604,13 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
     for (const item of this.destinationItemTargets) {
       const candidates = this.destinationCandidates(item);
-      this.setAvailability(
-        item,
-        !(scope.kind === 'singular' && !isOrderableItem(this.element))
-          && candidates.length > 0
-          && root.availableDestinations(scope, candidates).length > 0,
-      );
-      if (!item.hasAttribute('hidden')) {
+      const available = !(
+        scope.kind === 'singular' && !isOrderableItem(this.element)
+      ) && candidates.length > 0
+        && root.availableDestinations(scope, candidates).length > 0;
+
+      this.setAvailability(item, available);
+      if (available) {
         visible += 1;
       }
     }
@@ -664,7 +664,7 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
     if (this.hasMoveMenuTarget) {
       this.setAvailability(this.moveMenuTarget, available > 0);
-      return this.moveMenuTarget.hasAttribute('hidden') ? 0 : 1;
+      return available > 0 ? 1 : 0;
     }
 
     return 0;
@@ -686,11 +686,7 @@ export default class ItemController extends Controller<HTMLElement> implements R
     }
 
     if (this.hasBatchGroupTarget) {
-      this.batchGroupTarget.toggleAttribute(
-        'hidden',
-        (scope.kind === 'singular' && !isOrderableItem(this.element))
-          || (trueBatch && !batchActionsVisible),
-      );
+      this.batchGroupTarget.toggleAttribute('hidden', !batchActionsVisible);
     }
 
     if (this.hasInvokerGroupTarget) {
