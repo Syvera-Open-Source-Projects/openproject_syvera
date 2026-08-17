@@ -32,11 +32,12 @@ module Bim
         ::BasicData::BuiltinUsersSeeder,
         ::BasicData::ProjectRoleSeeder,
         ::BasicData::WorkPackageRoleSeeder,
-        ::BasicData::GlobalRoleSeeder,
         ::BasicData::ProjectQueryRoleSeeder,
+        ::BasicData::GlobalRoleSeeder,
         ::BasicData::TimeEntryActivitySeeder,
         ::BasicData::ColorSeeder,
         ::BasicData::ColorSchemeSeeder,
+        ::BasicData::PluginAuthProviderSeeder,
         ::BasicData::ProjectPhaseColorSeeder,
         ::BasicData::ProjectPhaseDefinitionSeeder,
         ::BasicData::StatusSeeder,
@@ -44,8 +45,9 @@ module Bim
         ::BasicData::WorkflowSeeder,
         ::BasicData::PrioritySeeder,
         ::Bim::BasicData::SettingSeeder,
-        ::Bim::BasicData::ThemeSeeder
-
+        ::Bim::BasicData::ThemeSeeder,
+        ::BasicData::ProjectCustomFieldSectionSeeder,
+        ::BasicData::UserCustomFieldSectionSeeder
       ]
     end
   end
