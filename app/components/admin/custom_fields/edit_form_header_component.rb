@@ -37,7 +37,7 @@ module Admin
         super(custom_field, **)
       end
 
-      def tabs
+      def tabs # rubocop:disable Metrics/AbcSize
         tabs = [
           {
             name: "edit",
@@ -62,12 +62,14 @@ module Admin
 
         if @custom_field.is_a?(WorkPackageCustomField) ||
            @custom_field.is_a?(ProjectCustomField)
-          tabs <<
-            {
-              name: "custom_field_projects",
-              path: custom_field_projects_path(@custom_field),
-              label: t(:label_project_plural)
-            }
+          unless OpenProject::FeatureDecisions.type_variants_active?
+            tabs <<
+              {
+                name: "custom_field_projects",
+                path: custom_field_projects_path(@custom_field),
+                label: t(:label_project_plural)
+              }
+          end
 
           tabs <<
             {

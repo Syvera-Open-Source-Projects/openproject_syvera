@@ -62,7 +62,8 @@ module API
         end
 
         link :customFields do
-          if current_user.allowed_in_project?(:select_custom_fields, represented.project)
+          if !OpenProject::FeatureDecisions.type_variants_active? &&
+             current_user.allowed_in_project?(:select_custom_fields, represented.project)
             {
               href: project_settings_custom_fields_path(represented.project.identifier),
               type: "text/html",

@@ -51,7 +51,8 @@ module Settings
       end
 
       def show_custom_fields?
-        User.current.allowed_in_project?(:select_custom_fields, @project)
+        !OpenProject::FeatureDecisions.type_variants_active? &&
+          User.current.allowed_in_project?(:select_custom_fields, @project)
       end
 
       def internal_comments_title

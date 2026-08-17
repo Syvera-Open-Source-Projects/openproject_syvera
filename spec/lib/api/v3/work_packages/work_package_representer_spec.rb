@@ -1459,6 +1459,14 @@ RSpec.describe API::V3::WorkPackages::WorkPackageRepresenter do
         let(:href) { project_settings_custom_fields_path(work_package.project.identifier) }
         let(:title) { "Custom fields" }
       end
+
+      context "when the variants feature is enabled", with_flag: { type_variants: true } do
+        let(:permissions) { all_permissions + [:select_custom_fields] }
+
+        it "has no link to set the custom fields for that project" do
+          expect(generated).not_to have_json_path("_links/customFields")
+        end
+      end
     end
 
     describe "customField" do

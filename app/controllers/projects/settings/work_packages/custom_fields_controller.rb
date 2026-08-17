@@ -29,7 +29,11 @@
 #++
 
 class Projects::Settings::WorkPackages::CustomFieldsController < Projects::SettingsController
+  include WorkPackageTypes::TypeVariantsFeature
+
   menu_item :settings_work_packages
+
+  before_action :require_type_variants_feature_disabled
 
   def show
     @wp_custom_fields = WorkPackageCustomField.order("lower(name)")

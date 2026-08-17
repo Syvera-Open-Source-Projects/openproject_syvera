@@ -42,5 +42,9 @@ module WorkPackageTypes
     def require_type_variants_feature
       render_404 unless type_variants_enabled?
     end
+
+    def require_type_variants_feature_disabled
+      render_404 if type_variants_enabled?
+    end
   end
 end

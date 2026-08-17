@@ -164,6 +164,12 @@ RSpec.describe API::V3::WorkPackages::CreateFormRepresenter do
             .to be_json_eql(expected.to_json)
                   .at_path("_links/customFields")
         end
+
+        context "when the variants feature is enabled", with_flag: { type_variants: true } do
+          it "has no link to set the custom fields for that project" do
+            expect(generated).not_to have_json_path("_links/customFields")
+          end
+        end
       end
 
       context "without the permission to select custom fields" do

@@ -31,10 +31,12 @@
 class Admin::CustomFields::CustomFieldProjectsController < ApplicationController
   include OpTurbo::ComponentStream
   include FlashMessagesOutputSafetyHelper
+  include WorkPackageTypes::TypeVariantsFeature
 
   layout "admin"
 
   before_action :require_admin
+  before_action :require_type_variants_feature_disabled
   before_action :find_custom_field
 
   before_action :available_custom_fields_projects_query, only: %i[index destroy]

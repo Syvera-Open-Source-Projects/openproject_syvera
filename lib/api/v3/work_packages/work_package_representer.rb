@@ -168,7 +168,7 @@ module API
 
         link :customFields,
              cache_if: -> { current_user.allowed_in_project?(:select_custom_fields, represented.project) } do
-          next if represented.project.nil?
+          next if represented.project.nil? || OpenProject::FeatureDecisions.type_variants_active?
 
           {
             href: project_settings_custom_fields_path(represented.project.identifier),
