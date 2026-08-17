@@ -66,6 +66,16 @@ const BOX_DENSITY_VARIANT_CLASSES = ['Box--condensed', 'Box--spacious'] as const
 // painted, so this layer stays framework-agnostic by contract.
 const BATCH_BADGE_CLASS = 'op-sortable-lists-drag-preview-batch-badge';
 
+// The badge's corner overhang on a multi-card drag, realised as container
+// padding so nothing paints past the container's border box: Firefox folds
+// such overflow into the drag snapshot and shifts its origin off the grab
+// offset. Written inline rather than through a stylesheet class because
+// Pragmatic inline-resets its popover container (padding: 0, among others —
+// see popoverResetUserAgentStyles) before handing it to render(), and only
+// a later inline write outranks an inline reset. The item controller reads
+// the padding back off the container to compensate the grab offset.
+const BATCH_BADGE_OVERHANG_PX = 8;
+
 export function renderDragPreview({
   previewTarget,
   sourceElement,
@@ -106,18 +116,21 @@ export function renderDragPreview({
 
   if (batchSize > 1) {
     // Anchors the badge's absolute positioning to the container itself
-    // rather than whatever ancestor Pragmatic happens to mount it under.
+    // (rather than whatever ancestor Pragmatic happens to mount it under)
+    // and pads it so the badge's overhang stays inside its border box.
     container.style.position = 'relative';
+    container.style.paddingTop = `${BATCH_BADGE_OVERHANG_PX}px`;
+    container.style.paddingRight = `${BATCH_BADGE_OVERHANG_PX}px`;
     renderBatchBadge(container, batchSize);
   }
 }
 
 // Absolutely positioned over the card clone's top-right corner (see the sass
-// block in drag_and_drop.sass for the geometry, including the Firefox
-// inset). The container is the preview mount Pragmatic hands render();
-// giving it position:relative here (rather than assuming the caller already
-// set it) keeps the badge anchored to the card regardless of what else
-// mounts there.
+// blocks in drag_and_drop.sass for the geometry: the container's padding is
+// the overhang the badge sits in). The container is the preview mount
+// Pragmatic hands render(); classing it here (rather than assuming the
+// caller already positioned it) keeps the badge anchored to the card
+// regardless of what else mounts there.
 //
 // lit-html's render() is safe to call directly on `container` here even
 // though the sanitised preview clone was already appended to it above:

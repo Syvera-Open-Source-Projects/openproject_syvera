@@ -266,10 +266,29 @@ export default class ItemController extends Controller<HTMLElement> implements R
 
         setCustomNativeDragPreview({
           nativeSetDragImage,
-          getOffset: preserveOffsetOnSource({
-            element: this.previewTarget,
-            input: location.current.input,
-          }),
+          // preserveOffsetOnSource keeps the pointer where it was pressed on
+          // the card, but it assumes the card sits at the container's origin.
+          // A batch preview pads the container's top (see renderDragPreview)
+          // so the badge overhang stays inside the border box, shifting the
+          // card down by that padding — add it back so the grabbed point
+          // still lines up under the pointer. Measured off the container
+          // (getOffset runs after render, with the container in the DOM), so
+          // the stylesheet stays the single source of the geometry; a
+          // single-card preview is unpadded and measures 0.
+          getOffset: (args) => {
+            const offset = preserveOffsetOnSource({
+              element: this.previewTarget,
+              input: location.current.input,
+            })(args);
+
+            return {
+              x: offset.x,
+              // `|| 0` covers a detached container, whose computed style
+              // resolves empty; Pragmatic always mounts it first, so that
+              // arm only serves direct calls in tests.
+              y: offset.y + (parseFloat(getComputedStyle(args.container).paddingTop) || 0),
+            };
+          },
           render: ({ container }) => renderDragPreview({
             previewTarget: this.previewTarget,
             sourceElement: this.element,

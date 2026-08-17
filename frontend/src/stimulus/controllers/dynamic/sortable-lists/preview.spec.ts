@@ -181,6 +181,8 @@ describe('sortable lists drag preview', () => {
         renderDragPreview({ previewTarget: target, sourceElement: target, container });
 
         expect(container.querySelector(badgeSelector)).toBeNull();
+        expect(container.style.paddingTop).toEqual('');
+        expect(container.style.paddingRight).toEqual('');
       });
 
       it('adds no badge when batchSize is explicitly 1', () => {
@@ -244,7 +246,26 @@ describe('sortable lists drag preview', () => {
         expect(badge).not.toBeNull();
         expect(container.contains(preview)).toBe(true);
         expect(container.contains(badge)).toBe(true);
+      });
+
+      // The padding realises the badge's corner overhang inside the
+      // container's border box — overflow past it would shift Firefox's
+      // drag-snapshot origin off the grab offset. It must be written inline,
+      // and after Pragmatic's own inline popover reset (padding: 0) has been
+      // applied, or the reset wins and the badge sits inside the card; the
+      // pre-zeroed padding here reproduces that reset.
+      it('pads the container inline past Pragmatic popover reset for a multi-card drag', () => {
+        const target = withWidth(previewTarget(), 320);
+        const container = document.createElement('div');
+        container.style.padding = '0';
+
+        renderDragPreview({
+          previewTarget: target, sourceElement: target, container, batchSize: 3,
+        });
+
         expect(container.style.position).toEqual('relative');
+        expect(container.style.paddingTop).toEqual('8px');
+        expect(container.style.paddingRight).toEqual('8px');
       });
     });
   });

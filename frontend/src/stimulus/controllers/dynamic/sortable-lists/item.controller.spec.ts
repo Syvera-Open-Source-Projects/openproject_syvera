@@ -1036,6 +1036,76 @@ describe('Sortable lists item controller', () => {
       expect(previewOptions.getOffset({ container })).toEqual({ x: 40, y: 30 });
     });
 
+    // A batch preview pads the container's top so the badge overhang stays
+    // inside its border box (see renderDragPreview), shifting the card down
+    // by that padding; the grab offset must shift with it or the pointer
+    // lands above the grabbed point. Rendered through the real preview so
+    // the padding measured here is the one renderDragPreview writes.
+    it('extends the grab offset by the batch container padding', async () => {
+      const { row, article } = renderBacklogsRow();
+
+      vi.spyOn(article, 'getBoundingClientRect').mockReturnValue({
+        x: 100,
+        y: 200,
+        top: 200,
+        left: 100,
+        right: 420,
+        bottom: 264,
+        width: 320,
+        height: 64,
+        toJSON: vi.fn(),
+      });
+
+      await ctx.nextFrame();
+
+      const controller = ctx.getController<InstanceType<typeof ItemControllerType>>('sortable-lists--item', row);
+      controller.connectRoot({
+        element: row,
+        busy: false,
+        moveInDirection: vi.fn(),
+        moveAvailability: vi.fn(() => null),
+        ownerListElementOf: vi.fn(() => null),
+        ownerRowsContainer: vi.fn(() => null),
+        beginDragBatch: vi.fn(),
+        activeDragBatchCount: vi.fn(() => 3),
+      });
+
+      vi.mocked(draggable).mock.lastCall?.[0].onGenerateDragPreview?.({
+        ...dragEventPayload(article),
+        location: { current: { input: { clientX: 140, clientY: 230 } } } as never,
+        nativeSetDragImage: vi.fn(),
+      });
+
+      const previewOptions = vi.mocked(setCustomNativeDragPreview).mock.lastCall?.[0] as {
+        render:({ container }:{ container:HTMLElement }) => void;
+        getOffset:(args:{ container:HTMLElement }) => { x:number; y:number };
+      };
+      const container = document.createElement('div');
+      // getComputedStyle resolves to the empty string on a detached element,
+      // and Pragmatic always mounts the container before render and offset.
+      document.body.appendChild(container);
+
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 328,
+        bottom: 72,
+        width: 328,
+        height: 72,
+        toJSON: vi.fn(),
+      });
+
+      try {
+        previewOptions.render({ container });
+
+        expect(previewOptions.getOffset({ container })).toEqual({ x: 40, y: 38 });
+      } finally {
+        container.remove();
+      }
+    });
+
     function generatePreview(article:HTMLElement):HTMLElement {
       const previewContainer = document.createElement('div');
 
