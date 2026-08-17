@@ -62,7 +62,7 @@ module WorkPackageTypes
       def configure_action(menu)
         menu.with_item(
           label: t(:button_configure),
-          href: helpers.edit_type_details_path(type_id: variant.type_id, variant_id: variant.id)
+          href: edit_type_details_path(type_id: variant.type_id, variant_id: variant.id)
         ) do |item|
           item.with_leading_visual_icon(icon: :gear)
         end
@@ -102,7 +102,7 @@ module WorkPackageTypes
         menu.with_item(
           label: t(:button_delete),
           scheme: :danger,
-          href: helpers.type_variant_path(type_id: variant.type_id, id: variant.id),
+          href: type_variant_path(type_id: variant.type_id, id: variant.id),
           form_arguments: { method: :delete, data: { turbo_confirm: t(:text_are_you_sure) } }
         ) do |item|
           item.with_leading_visual_icon(icon: :trash)

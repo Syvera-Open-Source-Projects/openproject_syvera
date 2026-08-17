@@ -76,7 +76,7 @@ module WorkPackageTypes
       end
 
       def variant_path(variant)
-        helpers.edit_type_details_path(type_id: variant.type_id, variant_id: variant.id)
+        edit_type_details_path(type_id: variant.type_id, variant_id: variant.id)
       end
 
       def add_variant_path(type)
@@ -96,7 +96,7 @@ module WorkPackageTypes
       end
 
       def variant_menu_src(variant)
-        helpers.menu_type_variant_path(type_id: variant.type_id, id: variant.id)
+        menu_type_variant_path(type_id: variant.type_id, id: variant.id)
       end
 
       def reorderable?(type)

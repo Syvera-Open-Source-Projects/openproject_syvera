@@ -78,7 +78,7 @@ module WorkPackageTypes
         previous_step = Steps.previous_before(current_step, variant)
         return unless previous_step && addressable?
 
-        helpers.type_creation_wizard_path(**variant_path_args, step: previous_step)
+        type_creation_wizard_path(**variant_path_args, step: previous_step)
       end
 
       # A project's settings has no screen for the type itself, so cancelling there returns to
@@ -86,7 +86,7 @@ module WorkPackageTypes
       def cancel_href
         return helpers.variant_scope_types_path if helpers.variant_scope_project || !type.persisted?
 
-        helpers.edit_type_details_path(type_id: type.id)
+        edit_type_details_path(type_id: type.id)
       end
     end
   end
