@@ -48,8 +48,10 @@
 
 // Multi-card batch count badge on a sortable-lists drag preview. Renders on
 // Primer's Counter contract (see PrimerCounterComponent) so its skin is
-// stylesheet-targetable rather than inline; this class only carries the
-// positioning Counter itself doesn't own.
+// stylesheet-targetable rather than inline; this class carries the
+// positioning Counter itself doesn't own, plus the accent skin matching the
+// drop indicator (--fgColor-accent line in border_box_list_component.sass —
+// --bgColor-accent-emphasis is that hue as a fill).
 .op-sortable-lists-drag-preview-batch-badge
   position: absolute
   top: -8px
@@ -58,7 +60,7 @@
   height: 20px
   padding: 0 6px
   border-radius: 999px
-  background-color: var(--bgColor-emphasis)
+  background-color: var(--bgColor-accent-emphasis)
   color: var(--fgColor-onEmphasis)
   font-size: 12px
   font-weight: 600
