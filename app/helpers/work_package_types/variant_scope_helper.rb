@@ -31,7 +31,7 @@
 module WorkPackageTypes
   # Which of the two addresses a variant configuration screen is answering at.
   #
-  # The paths need no help: one route with an optional project prefix serves both, and the
+  # The paths need no help: one route with an optional project segment serves both, and the
   # controller keeps the project in default_url_options, so a component names a route exactly as
   # it always did. What still differs is what a page says about where it is, and the one tab a
   # project has no business with.
