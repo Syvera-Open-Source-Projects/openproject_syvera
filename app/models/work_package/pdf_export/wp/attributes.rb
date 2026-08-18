@@ -264,7 +264,9 @@ module WorkPackage::PDFExport::Wp::Attributes
   end
 
   def custom_field_allowed?(custom_field, work_package)
-    custom_field.is_for_all? || work_package.project.work_package_custom_field_ids.include?(custom_field.id)
+    OpenProject::FeatureDecisions.type_variants_active? ||
+      custom_field.is_for_all? ||
+      work_package.project.work_package_custom_field_ids.include?(custom_field.id)
   end
 
   def form_key_custom_field_to_column_entries(form_key, work_package)

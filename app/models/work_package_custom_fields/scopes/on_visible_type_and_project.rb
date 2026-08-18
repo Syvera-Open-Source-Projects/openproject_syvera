@@ -66,12 +66,24 @@ module WorkPackageCustomFields::Scopes
               ON cft.type_variant_id = #{source_variant_id}
              AND cft.custom_field_id = custom_fields.id
              AND #{exclusion}
-            LEFT JOIN custom_fields_projects cfp
-              ON cfp.project_id = vp.id
-             AND cfp.custom_field_id = custom_fields.id
-            WHERE custom_fields.is_for_all = TRUE
-               OR cfp.custom_field_id IS NOT NULL
+            #{project_activation}
           )
+        SQL
+      end
+
+      private
+
+      # Once variants are in force the form configuration alone decides, so the project's own
+      # activations drop out of the condition entirely.
+      def project_activation
+        return "" if OpenProject::FeatureDecisions.type_variants_active?
+
+        <<~SQL.squish
+          LEFT JOIN custom_fields_projects cfp
+            ON cfp.project_id = vp.id
+           AND cfp.custom_field_id = custom_fields.id
+          WHERE custom_fields.is_for_all = TRUE
+             OR cfp.custom_field_id IS NOT NULL
         SQL
       end
     end

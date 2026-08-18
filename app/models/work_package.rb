@@ -529,7 +529,9 @@ class WorkPackage < ApplicationRecord
   end
 
   def self.available_for?(custom_field, work_package, type_variant_id)
-    (custom_field.available_project_ids.include?(work_package.project_id) || custom_field.is_for_all?) &&
+    (OpenProject::FeatureDecisions.type_variants_active? ||
+      custom_field.available_project_ids.include?(work_package.project_id) ||
+      custom_field.is_for_all?) &&
       custom_field.available_type_ids.include?(type_variant_id)
   end
   private_class_method :available_for?
@@ -568,11 +570,23 @@ class WorkPackage < ApplicationRecord
     project_ids = work_packages.map(&:project_id).uniq
     type_join = form_configuration_custom_fields_join(type_ids)
 
+    return custom_fields_configured_in(type_join) if OpenProject::FeatureDecisions.type_variants_active?
+
     custom_fields_activated_in(type_join, project_ids)
       .or(custom_fields_for_all(type_join))
       .distinct
   end
   private_class_method :available_custom_fields_from_db
+
+  # The projects join stays even though nothing filters on it: preload_available_custom_fields
+  # aggregates over it.
+  def self.custom_fields_configured_in(type_join)
+    WorkPackageCustomField
+      .joins(type_join)
+      .left_joins(:projects)
+      .distinct
+  end
+  private_class_method :custom_fields_configured_in
 
   def self.custom_fields_activated_in(type_join, project_ids)
     WorkPackageCustomField
