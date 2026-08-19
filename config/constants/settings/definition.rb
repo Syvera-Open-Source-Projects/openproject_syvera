@@ -1131,6 +1131,10 @@ module Settings
         description: "Enable or disable links to OpenProject community instances",
         default: true
       },
+      show_home_promotional_blocks: {
+        description: "Show promotional blocks on the home screen",
+        default: false
+      },
       show_product_version: {
         description: "Show product version information in the administration section",
         default: true

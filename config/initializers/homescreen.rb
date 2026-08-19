@@ -42,7 +42,8 @@ OpenProject::Static::Homescreen.manage :blocks do |blocks|
     },
     {
       name: "new_features",
-      if: Proc.new { OpenProject::Configuration.show_community_links? }
+      if: Proc.new { Setting.show_home_promotional_blocks? &&
+                     OpenProject::Configuration.show_community_links? }
     },
     {
       name: "meetings"
@@ -52,11 +53,13 @@ OpenProject::Static::Homescreen.manage :blocks do |blocks|
       if: Proc.new { User.current.logged? }
     },
     {
-      name: "news"
+      name: "news",
+      if: Proc.new { Setting.show_home_promotional_blocks? }
     },
     {
       name: "community",
-      if: Proc.new { OpenProject::Configuration.show_community_links? }
+      if: Proc.new { Setting.show_home_promotional_blocks? &&
+                     OpenProject::Configuration.show_community_links? }
     },
     {
       name: "administration",
@@ -64,7 +67,10 @@ OpenProject::Static::Homescreen.manage :blocks do |blocks|
     },
     {
       name: "upsell",
-      if: Proc.new { !(EnterpriseToken.active? || EnterpriseToken.hide_banners?) || EnterpriseToken.trial_only? }
+      if: Proc.new {
+        Setting.show_home_promotional_blocks? &&
+          (!(EnterpriseToken.active? || EnterpriseToken.hide_banners?) || EnterpriseToken.trial_only?)
+      }
     }
   )
 end
